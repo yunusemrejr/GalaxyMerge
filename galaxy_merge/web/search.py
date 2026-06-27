@@ -6,7 +6,7 @@ from typing import Any
 from galaxy_merge.core.locks import atomic_append
 from galaxy_merge.web.duckduckgo import search_duckduckgo
 from galaxy_merge.web.wikipedia import search_wikipedia, get_wikipedia_summary
-from galaxy_merge.web.fetch import fetch_page
+from galaxy_merge.web.fetch import MAX_FETCH_BYTES, fetch_page
 
 
 class WebSearch:
@@ -49,8 +49,8 @@ class WebSearch:
         self._log_cache(source, {"query": query, "results": results})
         return results
 
-    def fetch(self, url: str) -> dict[str, Any]:
-        result = fetch_page(url)
+    def fetch(self, url: str, max_bytes: int = MAX_FETCH_BYTES) -> dict[str, Any]:
+        result = fetch_page(url, max_bytes=max_bytes)
         self._log_cache("fetch", {"url": url, "result": result})
         return result
 

@@ -3,6 +3,7 @@ from typing import Any
 
 from galaxy_merge.tools.schemas import ToolSchema, ToolResult
 from galaxy_merge.web.search import WebSearch
+from galaxy_merge.web.fetch import MAX_FETCH_BYTES
 
 
 def make_web_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, Any]]:
@@ -12,8 +13,8 @@ def make_web_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, Any]
         results = searcher.search(query, source)
         return ToolResult(success=True, data={"query": query, "source": source, "results": results, "count": len(results)})
 
-    async def web_fetch(url: str) -> ToolResult:
-        result = searcher.fetch(url)
+    async def web_fetch(url: str, max_bytes: int = MAX_FETCH_BYTES) -> ToolResult:
+        result = searcher.fetch(url, max_bytes=max_bytes)
         if "error" in result:
             return ToolResult(success=False, error=result["error"])
         return ToolResult(success=True, data=result)
@@ -32,8 +33,8 @@ def make_web_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, Any]
             return ToolResult(success=False, error=result["error"])
         return ToolResult(success=True, data=result)
 
-    async def web_curl_fetch(url: str) -> ToolResult:
-        return await web_fetch(url)
+    async def web_curl_fetch(url: str, max_bytes: int = MAX_FETCH_BYTES) -> ToolResult:
+        return await web_fetch(url, max_bytes=max_bytes)
 
     return [
         (ToolSchema("web.search", "Search the web via DuckDuckGo or Wikipedia", parameters={
@@ -42,6 +43,7 @@ def make_web_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, Any]
         }), web_search),
         (ToolSchema("web.fetch", "Fetch a URL and return its content", parameters={
             "url": {"type": "string", "required": True},
+            "max_bytes": {"type": "integer", "default": MAX_FETCH_BYTES},
         }), web_fetch),
         (ToolSchema("web.duckduckgo.search", "Search DuckDuckGo", parameters={
             "query": {"type": "string", "required": True},
@@ -54,5 +56,6 @@ def make_web_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, Any]
         }), web_wikipedia_summary),
         (ToolSchema("web.curl.fetch", "Fetch a URL via curl/httpx", parameters={
             "url": {"type": "string", "required": True},
+            "max_bytes": {"type": "integer", "default": MAX_FETCH_BYTES},
         }), web_curl_fetch),
     ]

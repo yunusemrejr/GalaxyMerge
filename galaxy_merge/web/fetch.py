@@ -1,9 +1,22 @@
 import re
-from typing import Any
+from typing import Any, Final
+from urllib.parse import urlparse
 
 import requests
 from bs4 import BeautifulSoup
 
+
+MAX_FETCH_BYTES: Final[int] = 10_000
+HTML_CONTENT_TYPES: Final[tuple[str, ...]] = ("text/html", "application/xhtml")
+BINARY_CONTENT_TYPES: Final[tuple[str, ...]] = (
+    "application/octet-stream",
+    "application/pdf",
+    "application/zip",
+    "application/x-7z-compressed",
+    "application/x-rar-compressed",
+    "application/x-tar",
+)
+BINARY_CONTENT_PREFIXES: Final[tuple[str, ...]] = ("image/", "audio/", "video/")
 
 PROMPT_INJECTION_PATTERNS: list[str] = [
     r"(?i)ignore\s+(all\s+)?previous\s+instructions",
@@ -37,50 +50,93 @@ def _strip_prompt_injection(text: str) -> str:
     return text
 
 
-def fetch_page(url: str, timeout: int = 30) -> dict[str, Any]:
+def _content_type(headers: dict[str, str]) -> str:
+    return headers.get("content-type", "").split(";")[0].strip().lower()
+
+
+def _is_binary_content_type(content_type: str) -> bool:
+    if content_type in BINARY_CONTENT_TYPES:
+        return True
+    return any(content_type.startswith(prefix) for prefix in BINARY_CONTENT_PREFIXES)
+
+
+def _read_limited_text(response: requests.Response, max_bytes: int) -> tuple[str, bool]:
+    chunks: list[bytes] = []
+    total = 0
+    truncated = False
+    content_length = response.headers.get("content-length")
+    if content_length and content_length.isdigit() and int(content_length) > max_bytes:
+        truncated = True
+
+    for chunk in response.iter_content(chunk_size=8192):
+        if not chunk:
+            continue
+        remaining = max_bytes - total
+        if len(chunk) > remaining:
+            chunks.append(chunk[:remaining])
+            truncated = True
+            break
+        chunks.append(chunk)
+        total += len(chunk)
+        if total >= max_bytes:
+            break
+
+    encoding = response.encoding or "utf-8"
+    return b"".join(chunks).decode(encoding, errors="replace"), truncated
+
+
+def fetch_page(url: str, timeout: int = 30, max_bytes: int = MAX_FETCH_BYTES) -> dict[str, Any]:
+    scheme = urlparse(url).scheme.lower()
+    if scheme not in {"http", "https"}:
+        return {"url": url, "error": f"unsupported URL scheme: {scheme or 'missing'}", "status": 0}
+
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) GalaxyMerge/0.1",
     }
     try:
-        response = requests.get(url, headers=headers, timeout=timeout)
-        response.raise_for_status()
+        response = requests.get(url, headers=headers, timeout=timeout, stream=True)
+        try:
+            response.raise_for_status()
+            content_type = _content_type(response.headers)
 
-        content_type = response.headers.get("content-type", "")
-        if "text/html" in content_type or "application/xhtml" in content_type:
-            soup = BeautifulSoup(response.text, "lxml")
-            for tag in soup(["script", "style", "nav", "footer", "header", "iframe", "object", "embed"]):
-                tag.decompose()
-            text = soup.get_text(separator="\n", strip=True)
-            text = "\n".join(line for line in text.splitlines() if line.strip())
-            text = text[:10000]
-            title = soup.title.string.strip() if soup.title and soup.title.string else ""
+            if _is_binary_content_type(content_type):
+                return {
+                    "url": url,
+                    "error": f"blocked binary content type: {content_type or 'unknown'}",
+                    "content_type": content_type,
+                    "status": response.status_code,
+                }
+
+            body, truncated = _read_limited_text(response, max_bytes)
+
+            if content_type in HTML_CONTENT_TYPES:
+                soup = BeautifulSoup(body, "lxml")
+                for tag in soup(["script", "style", "nav", "footer", "header", "iframe", "object", "embed"]):
+                    tag.decompose()
+                text = soup.get_text(separator="\n", strip=True)
+                text = "\n".join(line for line in text.splitlines() if line.strip())
+                title = soup.title.string.strip() if soup.title and soup.title.string else ""
+                result_content_type = "html"
+            else:
+                text = body
+                title = ""
+                result_content_type = content_type
 
             injections = _detect_prompt_injection(text)
             sanitized = _strip_prompt_injection(text)
-
             return {
                 "url": url,
                 "title": title,
                 "content": sanitized,
-                "content_type": "html",
+                "content_type": result_content_type,
                 "status": response.status_code,
                 "injections_detected": len(injections),
                 "injection_patterns": injections,
                 "sanitized": len(injections) > 0,
+                "truncated": truncated,
+                "max_bytes": max_bytes,
             }
-        else:
-            content = response.text[:10000]
-            injections = _detect_prompt_injection(content)
-            sanitized = _strip_prompt_injection(content)
-            return {
-                "url": url,
-                "title": "",
-                "content": sanitized,
-                "content_type": content_type.split(";")[0],
-                "status": response.status_code,
-                "injections_detected": len(injections),
-                "injection_patterns": injections,
-                "sanitized": len(injections) > 0,
-            }
+        finally:
+            response.close()
     except requests.RequestException as e:
         return {"url": url, "error": str(e), "status": 0}
