@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Galaxy Merge Harness</title>
+<link rel="stylesheet" href="/css/app.css">
+</head>
+<body>
+<div id="top-bar">
+  <span class="bar-item" id="bar-project">Project: --</span>
+  <span class="bar-item" id="bar-session">Session: --</span>
+  <span class="bar-item" id="bar-goal">Goal: idle</span>
+  <span class="bar-item" id="bar-safety">Safety: enabled</span>
+  <span class="bar-item" id="bar-providers">Providers: --</span>
+</div>
+
+<div id="main-layout">
+  <div id="left-pane">
+    <div class="pane-header">Files <button class="pane-btn" id="btn-refresh-tree">&#x21bb;</button></div>
+    <div id="file-tree" class="pane-content"></div>
+    <div class="pane-header">Notes <span id="notes-controls"><button class="pane-btn" id="btn-new-note">+</button></span></div>
+    <div id="notes-panel" class="pane-content"></div>
+    <div class="pane-header">Memory</div>
+    <div id="memory-panel" class="pane-content"></div>
+    <div class="pane-header">Skills</div>
+    <div id="skills-panel" class="pane-content"></div>
+  </div>
+
+  <div id="center-pane">
+    <div id="goal-status" class="status-bar">
+      <span id="goal-phase">idle</span>
+      <span id="goal-phase-detail" style="color:var(--fg2);margin-left:12px"></span>
+    </div>
+    <div id="chat-stream" class="pane-content"></div>
+    <div id="goal-input-area">
+      <textarea id="goal-input" rows="2" placeholder="Enter a goal..."></textarea>
+      <button id="goal-submit">Go</button>
+    </div>
+  </div>
+
+  <div id="right-pane">
+    <div class="tab-bar">
+      <button class="tab-btn active" data-tab="council">Council</button>
+      <button class="tab-btn" data-tab="tools">Tools</button>
+      <button class="tab-btn" data-tab="logs">Logs</button>
+      <button class="tab-btn" data-tab="safety">Safety</button>
+      <button class="tab-btn" data-tab="browser">Browser</button>
+      <button class="tab-btn" data-tab="locations">Locs</button>
+    </div>
+    <div id="council-panel" class="tab-content active"></div>
+    <div id="tools-panel" class="tab-content"></div>
+    <div id="logs-panel" class="tab-content"></div>
+    <div id="safety-panel" class="tab-content"></div>
+    <div id="browser-panel" class="tab-content"></div>
+    <div id="locations-panel" class="tab-content"></div>
+  </div>
+</div>
+
+<script src="/js/state.js"></script>
+<script src="/js/api.js"></script>
+<script src="/js/panels/goal.js"></script>
+<script src="/js/panels/files.js"></script>
+<script src="/js/panels/council.js"></script>
+<script src="/js/panels/tools.js"></script>
+<script src="/js/panels/logs.js"></script>
+<script src="/js/panels/safety.js"></script>
+<script src="/js/panels/memory.js"></script>
+<script src="/js/panels/notes.js"></script>
+<script src="/js/panels/browser.js"></script>
+<script src="/js/panels/locations.js"></script>
+<script src="/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,109 @@
+{
+  "schema_version": 1,
+  "default_council": "coding_default",
+  "councils": {
+    "coding_default": {
+      "description": "Generic public example council using placeholder model selectors",
+      "max_parallel_calls": 4,
+      "timeout_seconds": 180,
+      "per_role_timeout": 90,
+      "retry_count": 2,
+      "retry_backoff": 1.0,
+      "retry_backoff_max": 10.0,
+      "minimum_quorum": 2,
+      "degraded_mode": "continue_with_warnings",
+      "error_visibility": {
+        "terminal": "provider_role_error",
+        "gui": "provider_role_error",
+        "event_log": "full_failure_context"
+      },
+      "roles": {
+        "planner": {
+          "required": true,
+          "criticality": "fallback_required",
+          "fallback_chain": ["planner", "reviewer", "synthesizer"],
+          "model_selector": {
+            "role": "planner",
+            "prefer_strengths": ["planning", "reasoning"],
+            "cost_policy": "balanced"
+          }
+        },
+        "scout": {
+          "required": true,
+          "criticality": "degradable",
+          "fallback_chain": ["scout", "cheap_verifier"],
+          "model_selector": {
+            "role": "scout",
+            "prefer_strengths": ["fast_scan", "summarization"],
+            "cost_policy": "cheap"
+          }
+        },
+        "implementer": {
+          "required": true,
+          "criticality": "fallback_required",
+          "fallback_chain": ["implementer", "synthesizer", "planner"],
+          "model_selector": {
+            "role": "implementer",
+            "prefer_strengths": ["implementation", "tool_calling"],
+            "cost_policy": "quality"
+          }
+        },
+        "reviewer": {
+          "required": true,
+          "criticality": "fallback_or_blocked",
+          "fallback_chain": ["reviewer", "skeptic"],
+          "model_selector": {
+            "role": "reviewer",
+            "prefer_strengths": ["review", "reasoning"],
+            "cost_policy": "balanced"
+          }
+        },
+        "cheap_verifier": {
+          "required": true,
+          "criticality": "continue_if_reviewer_passes",
+          "fallback_chain": ["cheap_verifier", "scout"],
+          "model_selector": {
+            "role": "cheap_verifier",
+            "prefer_strengths": ["cheap_review", "fast_scan"],
+            "cost_policy": "cheap"
+          }
+        },
+        "skeptic": {
+          "required": true,
+          "criticality": "fallback_or_blocked",
+          "fallback_chain": ["skeptic", "reviewer"],
+          "model_selector": {
+            "role": "skeptic",
+            "prefer_strengths": ["reasoning", "review"],
+            "cost_policy": "balanced"
+          }
+        },
+        "synthesizer": {
+          "required": true,
+          "criticality": "fallback_required",
+          "fallback_chain": ["synthesizer", "implementer", "planner"],
+          "model_selector": {
+            "role": "synthesizer",
+            "prefer_strengths": ["synthesis", "instruction_following"],
+            "cost_policy": "quality"
+          }
+        }
+      },
+      "fusion_policy": {
+        "mode": "evidence_weighted_synthesis",
+        "deduplicate_findings": true,
+        "resolve_conflicts": true,
+        "prefer_tool_evidence": true,
+        "prefer_file_evidence": true,
+        "require_patch_rationale": true,
+        "require_verification_plan": true
+      },
+      "completion_policy": {
+        "require_tests_if_available": true,
+        "require_diff_review": true,
+        "require_skeptic_review": true,
+        "allow_partial_completion": false
+      }
+    }
+  }
+}

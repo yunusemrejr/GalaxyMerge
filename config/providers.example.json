@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "providers": {
+    "example_openai_compatible": {
+      "enabled": false,
+      "type": "openai_compatible",
+      "base_url": "https://api.example.invalid/v1",
+      "auth": {
+        "type": "env",
+        "env_var": "GM_EXAMPLE_PROVIDER_API_KEY"
+      },
+      "timeout_seconds": 60,
+      "rate_limit": {
+        "requests_per_minute": 30,
+        "tokens_per_minute": null
+      }
+    },
+    "example_local_ollama": {
+      "enabled": false,
+      "type": "ollama",
+      "base_url": "http://127.0.0.1:11434",
+      "auth": {
+        "type": "none"
+      },
+      "timeout_seconds": 60
+    }
+  }
+}

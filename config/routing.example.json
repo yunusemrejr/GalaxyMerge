@@ -1,0 +1,36 @@
+{
+  "schema_version": 1,
+  "routing_rules": [
+    {
+      "match": {
+        "task_type": "small_edit",
+        "estimated_files": {
+          "max": 3
+        }
+      },
+      "council": "coding_default",
+      "max_parallel_calls": 3,
+      "cost_bias": "balanced"
+    },
+    {
+      "match": {
+        "task_type": "bug_fix"
+      },
+      "council": "coding_default",
+      "max_parallel_calls": 4,
+      "cost_bias": "balanced"
+    },
+    {
+      "match": {
+        "task_type": "large_refactor"
+      },
+      "council": "coding_default",
+      "max_parallel_calls": 4,
+      "cost_bias": "quality"
+    }
+  ],
+  "fallback": {
+    "council": "coding_default",
+    "cost_bias": "balanced"
+  }
+}

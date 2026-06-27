@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "models": {
+    "example_openai_compatible:example-coder": {
+      "provider": "example_openai_compatible",
+      "model": "example-coder",
+      "enabled": false,
+      "context_window": 32000,
+      "output_limit": 4096,
+      "strengths": [
+        "planning",
+        "implementation",
+        "review",
+        "synthesis"
+      ],
+      "cost_tier": "medium",
+      "latency_tier": "medium",
+      "roles": [
+        "planner",
+        "implementer",
+        "reviewer",
+        "synthesizer"
+      ]
+    },
+    "example_local_ollama:example-local": {
+      "provider": "example_local_ollama",
+      "model": "example-local",
+      "enabled": false,
+      "context_window": 8192,
+      "output_limit": 2048,
+      "strengths": [
+        "fast_scan",
+        "cheap_review"
+      ],
+      "cost_tier": "local",
+      "latency_tier": "fast",
+      "roles": [
+        "scout",
+        "cheap_verifier"
+      ]
+    }
+  }
+}

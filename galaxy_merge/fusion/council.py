@@ -1,0 +1,300 @@
+import asyncio
+import json
+import logging
+import time
+from typing import Any
+
+from galaxy_merge.providers.registry import ProviderRegistry
+from galaxy_merge.fusion.schemas import ROLE_SCHEMAS
+from galaxy_merge.fusion.synthesizer import repair_malformed
+
+logger = logging.getLogger("galaxy_merge.fusion.council")
+
+
+class Council:
+    def __init__(self, providers: ProviderRegistry, config: dict[str, Any], goal: str, event_log=None):
+        self.providers = providers
+        self.config = config
+        self.goal = goal
+        self.max_parallel = config.get("max_parallel_calls", 4)
+        self.timeout = config.get("timeout_seconds", 180)
+        self.event_log = event_log
+        self._results: dict[str, list[dict[str, Any]]] = {}
+        # Track degraded state per role
+        self._degraded_roles: list[str] = []
+        self._failed_roles: list[str] = []
+
+    async def execute(self) -> dict[str, Any]:
+        roles_config = self.config.get("roles", {})
+        tasks = []
+
+        for role_name, role_config in roles_config.items():
+            if not role_config.get("required", True):
+                continue
+            count = role_config.get("count", 1)
+            for _ in range(count):
+                tasks.append(self._execute_role_with_fallback(role_name, role_config))
+
+        sem = asyncio.Semaphore(self.max_parallel)
+
+        async def _limited(task):
+            async with sem:
+                return await task
+
+        results = await asyncio.gather(*[_limited(t) for t in tasks], return_exceptions=True)
+
+        role_names = []
+        for role_name, role_config in roles_config.items():
+            if not role_config.get("required", True):
+                continue
+            for _ in range(role_config.get("count", 1)):
+                role_names.append(role_name)
+
+        for i, role_name in enumerate(role_names):
+            result = results[i] if i < len(results) else None
+            if isinstance(result, Exception):
+                self._results.setdefault(role_name, []).append({"error": str(result)})
+                self._degraded_roles.append(role_name)
+                self._failed_roles.append(role_name)
+            elif result:
+                if "error" in result:
+                    self._degraded_roles.append(role_name)
+                    self._failed_roles.append(role_name)
+                self._results.setdefault(role_name, []).append(result)
+
+        # Enforce minimum quorum
+        quorum = self.config.get("minimum_quorum", 0)
+        if quorum > 0:
+            successful_roles = [r for r in self._results.keys()
+                                if any("error" not in rr for rr in self._results[r])]
+            if len(successful_roles) < quorum:
+                logger.warning(
+                    "Council quorum not met: %d/%d roles succeeded (quorum=%d)",
+                    len(successful_roles), len(roles_config), quorum,
+                )
+                if self.event_log:
+                    self.event_log.emit(
+                        "council_quorum_failed",
+                        succeeded=len(successful_roles),
+                        required=quorum,
+                    )
+
+        return self._results
+
+    async def _execute_role_with_fallback(self, role_name: str, role_config: dict[str, Any]) -> dict[str, Any]:
+        selector = role_config.get("model_selector", {})
+        cost_policy = selector.get("cost_policy", "balanced")
+        prefer_strengths = selector.get("prefer_strengths", None)
+
+        best = self.providers.select_best_model(role_name, cost_policy, prefer_strengths)
+        if not best:
+            candidates = self.providers.get_models_for_role(role_name)
+            if candidates:
+                best = candidates[0]
+            else:
+                return {"role": role_name, "error": "no eligible models found"}
+
+        provider_id, model, model_config = best
+        errors = []
+
+        max_retries = self.config.get("retry_count", 3)
+        start = time.monotonic()
+
+        for attempt in range(max_retries):
+            provider = self.providers.get(provider_id)
+            if not provider:
+                return {"role": role_name, "error": "provider not available"}
+
+            if not provider.healthy:
+                next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                if next_best:
+                    provider_id, model, _ = next_best
+                    provider = self.providers.get(provider_id)
+                else:
+                    self._emit_provider_failed(
+                        role_name,
+                        provider_id,
+                        model,
+                        "no healthy provider available",
+                        0,
+                        start,
+                    )
+                    return {"role": role_name, "error": "no healthy provider available"}
+
+            system_prompt = self._build_role_prompt(role_name)
+            stable_prefix = self._build_stable_prefix(role_name)
+            dynamic_sections = [
+                {"role": "user", "content": f"Goal: {self.goal}"},
+            ]
+            messages = stable_prefix + dynamic_sections
+
+            per_role_timeout = self.config.get("per_role_timeout", self.timeout)
+            try:
+                result = await asyncio.wait_for(
+                    provider.chat_completion(messages, model, temperature=0.3),
+                    timeout=per_role_timeout,
+                )
+            except asyncio.TimeoutError:
+                result = {"success": False, "error": f"request timed out after {per_role_timeout}s"}
+
+            if result.get("success"):
+                content = result["content"]
+                repaired = repair_malformed(content)
+                try:
+                    parsed = json.loads(repaired)
+                except json.JSONDecodeError:
+                    parsed = {"raw": content}
+
+                # Validate output against schema
+                schema = ROLE_SCHEMAS.get(role_name, {})
+                required_fields = schema.get("required", [])
+                missing_fields = [f for f in required_fields if f not in parsed or not parsed.get(f)]
+                if missing_fields:
+                    errors.append(f"attempt {attempt + 1}: missing required fields {missing_fields}")
+                    self._emit_provider_failed(
+                        role_name,
+                        provider_id,
+                        model,
+                        f"schema validation: missing {missing_fields}",
+                        attempt + 1,
+                        start,
+                    )
+                    next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                    if next_best:
+                        provider_id, model, _ = next_best
+                        backoff = self.config.get("retry_backoff", 1.0) * (2 ** attempt)
+                        capped_backoff = min(backoff, self.config.get("retry_backoff_max", 30.0))
+                        await asyncio.sleep(capped_backoff)
+                        continue
+                    break
+
+                return {
+                    "role": role_name,
+                    "content": content,
+                    "parsed": parsed,
+                    "model": result.get("model", model),
+                    "provider": provider_id,
+                    "attempt": attempt + 1,
+                }
+            else:
+                error_msg = result.get("error", "unknown")
+                errors.append(f"attempt {attempt + 1}: {error_msg}")
+                self._emit_provider_failed(role_name, provider_id, model, error_msg, attempt + 1, start)
+                # Mark unhealthy to prevent cycling back to failed providers
+                self.providers.mark_unhealthy(
+                    provider_id,
+                    model=model,
+                    role=role_name,
+                    error=error_msg,
+                    attempt=attempt + 1,
+                    duration_ms=self._elapsed_ms(start),
+                )
+
+                next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                if next_best:
+                    provider_id, model, _ = next_best
+                else:
+                    break
+
+                backoff = self.config.get("retry_backoff", 1.0) * (2 ** attempt)
+                capped_backoff = min(backoff, self.config.get("retry_backoff_max", 30.0))
+                logger.info("Role %s retry %d after %0.1fs backoff", role_name, attempt + 1, capped_backoff)
+                await asyncio.sleep(capped_backoff)
+
+        self._emit_provider_failed(role_name, provider_id, model, "; ".join(errors), max_retries, start)
+        return {"role": role_name, "error": "; ".join(errors)}
+
+    def _find_fallback(self, role_name: str, failed_provider: str, cost_policy: str) -> tuple[str, str, dict[str, Any]] | None:
+        candidates = self.providers.get_models_for_role(role_name)
+        tried = {failed_provider}
+        for provider_id, model, model_config in candidates:
+            if provider_id in tried:
+                continue
+            provider = self.providers.get(provider_id)
+            if provider:
+                tried.add(provider_id)
+                if provider.healthy:
+                    logger.info("Fallback for %s: %s -> %s (%s)", role_name, failed_provider, provider_id, model)
+                    if self.event_log:
+                        self.event_log.emit(
+                            "role_fallback",
+                            role=role_name,
+                            from_provider=failed_provider,
+                            to_provider=provider_id,
+                            model=model,
+                            fallback_decision="selected",
+                        )
+                    return (provider_id, model, model_config)
+        return None
+
+    def _emit_provider_failed(
+        self,
+        role: str,
+        provider_id: str,
+        model: str,
+        error: str,
+        attempt: int,
+        start: float,
+    ):
+        if role not in self._degraded_roles:
+            self._degraded_roles.append(role)
+        if self.event_log:
+            self.event_log.emit(
+                "role_execution_failed",
+                role=role,
+                provider_id=provider_id,
+                model=model,
+                error=error,
+                error_type=self._classify_error(error),
+                duration_ms=self._elapsed_ms(start),
+                attempt=attempt,
+                retry_count=self.config.get("retry_count", 3),
+                fallback_decision="pending" if attempt < self.config.get("retry_count", 3) else "exhausted",
+            )
+        logger.warning("Role %s on provider %s failed (attempt %d): %s", role, provider_id, attempt, error)
+
+    def _elapsed_ms(self, start: float) -> int:
+        return int((time.monotonic() - start) * 1000)
+
+    def _classify_error(self, error: str) -> str:
+        lower = error.lower()
+        if "401" in lower or "unauthorized" in lower or "api_key" in lower:
+            return "auth"
+        if "429" in lower or "rate limit" in lower:
+            return "rate_limit"
+        if "timeout" in lower or "timed out" in lower:
+            return "timeout"
+        if "500" in lower or "internal server" in lower:
+            return "server_error"
+        if "context" in lower:
+            return "context_limit"
+        if "schema validation" in lower or "json" in lower:
+            return "invalid_response"
+        if "disconnect" in lower or "connection closed" in lower:
+            return "stream_disconnect"
+        return "provider_error"
+
+    def get_degraded_roles(self) -> list[str]:
+        return list(self._degraded_roles)
+
+    def get_failed_roles(self) -> list[str]:
+        return list(self._failed_roles)
+
+    def _build_stable_prefix(self, role: str) -> list[dict[str, str]]:
+        from galaxy_merge.fusion.roles import ROLE_DEFINITIONS
+        definition = ROLE_DEFINITIONS.get(role, {})
+        instructions = "\n".join(f"- {i}" for i in definition.get("instructions", []))
+        schema = ROLE_SCHEMAS.get(role, {})
+        schema_str = json.dumps(schema, indent=2) if schema else ""
+        return [
+            {"role": "system", "content": (
+                f"You are the {role} role in Galaxy Merge Harness.\n"
+                f"Purpose: {definition.get('purpose', '')}\n\n"
+                f"Instructions:\n{instructions}\n\n"
+                f"Output schema:\n{schema_str}\n\n"
+                "Respond with valid JSON matching the schema."
+            )},
+        ]
+
+    def _build_role_prompt(self, role: str) -> str:
+        return self._build_stable_prefix(role)[0]["content"]
