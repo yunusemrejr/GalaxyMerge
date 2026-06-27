@@ -79,3 +79,14 @@ def test_fallback_secret_scan_accepts_public_candidate_set() -> None:
 
     # Then: the candidate set is accepted without leaking local runtime state.
     assert result.returncode == 0, result.stderr
+
+
+def test_fallback_secret_scan_accepts_git_history() -> None:
+    # Given: public history may contain more than one commit.
+    script = REPO_ROOT / "scripts" / "secret_scan.sh"
+
+    # When: the fallback scanner is asked to scan history.
+    result = _run(str(script), "--history")
+
+    # Then: each revision is scanned as its own Git revision argument.
+    assert result.returncode == 0, result.stderr

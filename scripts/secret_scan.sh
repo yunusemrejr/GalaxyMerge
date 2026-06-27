@@ -33,13 +33,16 @@ while IFS= read -r path; do
 done < <(git ls-files --cached --others --exclude-standard)
 
 if [ "${1:-}" = "--history" ] && git rev-parse --verify HEAD >/dev/null 2>&1; then
-    if git grep -IE "$SECRET_RE" "$(git rev-list --all)" -- ':!uv.lock' \
-        | grep -Eiv "$PLACEHOLDER_RE" \
-        | cut -d: -f1-2 \
-        | sort -u >/tmp/gm-secret-history-findings.txt 2>/dev/null; then
-        echo "secret-like value found in git history:" >&2
-        sed -n '1,80p' /tmp/gm-secret-history-findings.txt >&2
-        failed=1
+    mapfile -t commits < <(git rev-list --all)
+    if [ "${#commits[@]}" -gt 0 ]; then
+        if git grep -IE "$SECRET_RE" "${commits[@]}" -- ':!uv.lock' \
+            | grep -Eiv "$PLACEHOLDER_RE" \
+            | cut -d: -f1-2 \
+            | sort -u >/tmp/gm-secret-history-findings.txt 2>/dev/null; then
+            echo "secret-like value found in git history:" >&2
+            sed -n '1,80p' /tmp/gm-secret-history-findings.txt >&2
+            failed=1
+        fi
     fi
 fi
 

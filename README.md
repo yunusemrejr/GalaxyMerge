@@ -1,6 +1,7 @@
-# Galaxy Merge Harness
+# GalaxyMerge
 
-Self-contained Linux-native autonomous coding harness.
+Galaxy Merge Harness is an Ubuntu/Linux-native web GUI based Python backend
+agentic coding harness for developers.
 
 ## Repository
 
