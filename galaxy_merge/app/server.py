@@ -1,6 +1,5 @@
 import asyncio
 import json
-import socket
 import threading
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from galaxy_merge.safety.credential_policy import CredentialPolicy
 from galaxy_merge.core.locks import FileLock, atomic_write
 from galaxy_merge.safety.path_utils import is_relative_to, resolve_inside
 from galaxy_merge.browser.manager import BrowserManager
+from galaxy_merge.app.ports import reserve_socket
 
 STATIC_DIR = Path(__file__).resolve().parent.parent / "gui" / "static"
 APP_INSTALL_DIR = Path(__file__).resolve().parent.parent.parent
@@ -98,40 +98,12 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
     }
 
 
-def _find_free_port(start: int = 7419) -> int:
-    for port in range(start, start + 100):
-        try:
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            s.bind(("127.0.0.1", port))
-            s.close()
-            return port
-        except OSError:
-            continue
-    return 0
-
-
-def _reserve_socket(port: int = 0, start: int = 7419) -> socket.socket:
-    candidates = [port] if port else list(range(start, start + 100))
-    for candidate in candidates:
-        try:
-            sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-            sock.bind(("127.0.0.1", candidate))
-            sock.listen(128)
-            sock.set_inheritable(True)
-            return sock
-        except OSError:
-            continue
-    raise OSError("could not reserve a Galaxy Merge server port")
-
-
 class SessionServer:
     def __init__(self, session: Session, port: int = 0, strict_socket: bool = False):
         self.session = session
-        self._socket: socket.socket | None = None
+        self._socket = None
         try:
-            self._socket = _reserve_socket(port)
+            self._socket = reserve_socket(port)
             self.port = self._socket.getsockname()[1]
         except OSError:
             if strict_socket:
@@ -484,7 +456,7 @@ class SessionServer:
 
     def serve(self) -> None:
         if self._socket is None:
-            self._socket = _reserve_socket(self.port)
+            self._socket = reserve_socket(self.port)
             self.port = self._socket.getsockname()[1]
         config = uvicorn.Config(
             self.app,

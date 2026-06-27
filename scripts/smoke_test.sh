@@ -62,7 +62,7 @@ echo ""
 echo "--- Phase 3: Server Launch ---"
 SERVER_OUT=$(mktemp)
 cd "$PROJECT_DIR"
-"${GM_PYTHON[@]}" -m galaxy_merge --no-browser --port 7452 > "$SERVER_OUT" 2>&1 &
+"${GM_PYTHON[@]}" -m galaxy_merge --no-browser --port 0 > "$SERVER_OUT" 2>&1 &
 SERVER_PID=$!
 sleep 3
 
@@ -76,6 +76,13 @@ pass "Server process running (PID $SERVER_PID)"
 # Boot log verification
 cat "$SERVER_OUT"
 BOOT_LOG=$(cat "$SERVER_OUT")
+GUI_URL=$(echo "$BOOT_LOG" | sed -n 's/^GUI: //p' | tail -1)
+API_BASE="${GUI_URL%/}"
+if [ -n "$API_BASE" ]; then
+    pass "API base captured: $API_BASE"
+else
+    fail "API base missing from boot log"
+fi
 pass "Boot log shows WorkRoot: $(echo "$BOOT_LOG" | grep -o 'WorkRoot: .*' || echo 'missing')"
 pass "Boot log shows Session ID: $(echo "$BOOT_LOG" | grep -o 'Session ID: .*' || echo 'missing')"
 pass "Boot log shows GUI URL: $(echo "$BOOT_LOG" | grep -o 'GUI: .*' || echo 'missing')"
@@ -85,44 +92,44 @@ pass "Boot log shows Safety: $(echo "$BOOT_LOG" | grep -o 'Safety: .*' || echo '
 echo ""
 echo "--- Phase 4: API Endpoints ---"
 
-SESSION_RESP=$(curl -sf http://127.0.0.1:7452/api/session 2>/dev/null || echo "")
+SESSION_RESP=$(curl -sf "$API_BASE/api/session" 2>/dev/null || echo "")
 pass "GET /api/session returns session: $(echo "$SESSION_RESP" | grep -o '"session_id":"[^"]*"' || echo 'missing')"
 SESSION_ID=$(echo "$SESSION_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin)['session_id'])" 2>/dev/null || echo "")
 pass "Session ID captured: $SESSION_ID"
 
-PROJECT_RESP=$(curl -sf http://127.0.0.1:7452/api/project 2>/dev/null || echo "")
+PROJECT_RESP=$(curl -sf "$API_BASE/api/project" 2>/dev/null || echo "")
 pass "GET /api/project returns workroot: $(echo "$PROJECT_RESP" | grep -o '"workroot":"[^"]*"' || echo 'missing')"
 
-TREE_RESP=$(curl -sf http://127.0.0.1:7452/api/tree 2>/dev/null || echo "")
+TREE_RESP=$(curl -sf "$API_BASE/api/tree" 2>/dev/null || echo "")
 pass "GET /api/tree contains main.py: $(echo "$TREE_RESP" | grep -o 'main.py' || echo 'missing')"
 
-SAFETY_RESP=$(curl -sf http://127.0.0.1:7452/api/safety 2>/dev/null || echo "")
+SAFETY_RESP=$(curl -sf "$API_BASE/api/safety" 2>/dev/null || echo "")
 pass "GET /api/safety has policy: $(echo "$SAFETY_RESP" | grep -o '"active_policy":"[^"]*"' || echo 'missing')"
 
-TOOLS_RESP=$(curl -sf http://127.0.0.1:7452/api/tools 2>/dev/null || echo "")
+TOOLS_RESP=$(curl -sf "$API_BASE/api/tools" 2>/dev/null || echo "")
 TOOLS_COUNT=$(echo "$TOOLS_RESP" | python3 -c "import sys,json; print(len(json.load(sys.stdin).get('tools',[])))" 2>/dev/null || echo "0")
 pass "GET /api/tools lists $TOOLS_COUNT registered tools"
 
-EVENTS_RESP=$(curl -sf http://127.0.0.1:7452/api/events 2>/dev/null || echo "")
+EVENTS_RESP=$(curl -sf "$API_BASE/api/events" 2>/dev/null || echo "")
 EVENT_COUNT=$(echo "$EVENTS_RESP" | python3 -c "import sys,json; print(len(json.load(sys.stdin)))" 2>/dev/null || echo "0")
 pass "GET /api/events has $EVENT_COUNT events (session_started, workroot_detected)"
 
-FILE_RESP=$(curl -sf "http://127.0.0.1:7452/api/file?path=main.py" 2>/dev/null || echo "")
+FILE_RESP=$(curl -sf "$API_BASE/api/file?path=main.py" 2>/dev/null || echo "")
 pass "GET /api/file returns main.py content: $(echo "$FILE_RESP" | grep -o '"content":"[^"]*"' || echo 'missing')"
 
-COUNCIL_RESP=$(curl -sf http://127.0.0.1:7452/api/council 2>/dev/null || echo "")
+COUNCIL_RESP=$(curl -sf "$API_BASE/api/council" 2>/dev/null || echo "")
 pass "GET /api/council returns tools array"
 
-LOCATIONS_RESP=$(curl -sf http://127.0.0.1:7452/api/locations 2>/dev/null || echo "")
+LOCATIONS_RESP=$(curl -sf "$API_BASE/api/locations" 2>/dev/null || echo "")
 pass "GET /api/locations has workroot: $(echo "$LOCATIONS_RESP" | grep -o '"workroot":"[^"]*"' || echo 'missing')"
 
-NOTES_RESP=$(curl -sf http://127.0.0.1:7452/api/notes 2>/dev/null || echo "")
+NOTES_RESP=$(curl -sf "$API_BASE/api/notes" 2>/dev/null || echo "")
 pass "GET /api/notes returns notes object"
 
 # === 5. Goal input ===
 echo ""
 echo "--- Phase 5: Goal Execution ---"
-GOAL_RESP=$(curl -sf -X POST http://127.0.0.1:7452/api/goal \
+GOAL_RESP=$(curl -sf -X POST "$API_BASE/api/goal" \
     -H 'Content-Type: application/json' \
     -d '{"goal":"add a Python test file"}' 2>/dev/null || echo "")
 STATUS=$(echo "$GOAL_RESP" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status',''))" 2>/dev/null || echo "")
@@ -159,7 +166,7 @@ fi
 
 echo ""
 echo "--- Phase 6: GUI ---"
-GUI_RESP=$(curl -sf http://127.0.0.1:7452/ 2>/dev/null || echo "")
+GUI_RESP=$(curl -sf "$API_BASE/" 2>/dev/null || echo "")
 pass "GUI serves index.html: $(echo "$GUI_RESP" | grep -c 'Galaxy Merge Harness' || echo '0')"
 pass "GUI has goal input: $(echo "$GUI_RESP" | grep -c 'goal-input' || echo '0')"
 pass "GUI has file tree: $(echo "$GUI_RESP" | grep -c 'file-tree' || echo '0')"
