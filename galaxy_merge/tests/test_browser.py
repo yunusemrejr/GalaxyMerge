@@ -1,3 +1,9 @@
+
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
+
 import base64
 
 from galaxy_merge.browser.console_logs import ConsoleLogCollector

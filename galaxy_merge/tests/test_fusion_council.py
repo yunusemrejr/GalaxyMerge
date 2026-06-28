@@ -4,11 +4,15 @@ outputs — not single-model "pick best answer".
 
 Uses a mock provider that returns controlled structured JSON per role.
 """
+
+
 import json
 import asyncio
 from pathlib import Path
 from typing import Any
 import pytest
+
+pytestmark = [pytest.mark.unit]
 
 from galaxy_merge.fusion.council import Council
 from galaxy_merge.fusion.router import FusionRouter
@@ -96,7 +100,7 @@ class MockProvider(ProviderBase):
     def set_mock_responses(self, responses: dict[str, dict[str, Any]]) -> None:
         self._mock_responses = responses
 
-    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False):
+    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs):
         self.call_history.append({
             "role": "extracted_from_prompt",
             "model": model,

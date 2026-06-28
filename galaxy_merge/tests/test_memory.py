@@ -1,3 +1,9 @@
+
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
+
 import json
 
 from galaxy_merge.memory.store import MemoryStore

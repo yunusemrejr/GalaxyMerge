@@ -1,15 +1,21 @@
+
+
 import pytest
+
+pytestmark = [pytest.mark.integration]
 from galaxy_merge.web.search import WebSearch
 from galaxy_merge.web.fetch import fetch_page
 from galaxy_merge.tools.web_tools import make_web_tools
 
 
 class TestWebSearch:
+    @pytest.mark.network
     def test_search_duckduckgo(self):
         searcher = WebSearch()
         results = searcher.search("python programming", source="duckduckgo")
         assert len(results) > 0
 
+    @pytest.mark.network
     def test_search_wikipedia(self):
         searcher = WebSearch()
         results = searcher.search("Python", source="wikipedia")
@@ -129,6 +135,7 @@ class TestWebSearch:
 
 
 class TestDuckDuckGo:
+    @pytest.mark.network
     def test_search_returns_list(self):
         from galaxy_merge.web.duckduckgo import search_duckduckgo
         results = search_duckduckgo("test query")
@@ -136,11 +143,13 @@ class TestDuckDuckGo:
 
 
 class TestWikipedia:
+    @pytest.mark.network
     def test_search_returns_list(self):
         from galaxy_merge.web.wikipedia import search_wikipedia, get_wikipedia_summary
         results = search_wikipedia("Python programming language")
         assert isinstance(results, list)
 
+    @pytest.mark.network
     def test_summary(self):
         from galaxy_merge.web.wikipedia import get_wikipedia_summary
         result = get_wikipedia_summary("Python (programming language)")

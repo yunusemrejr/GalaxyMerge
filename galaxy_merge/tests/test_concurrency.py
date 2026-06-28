@@ -8,6 +8,12 @@ safety.  No mocks; no shortcuts.
 Scenarios (1-10 from the spec) are all covered.
 """
 
+
+import pytest
+
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
+
+
 import json
 import os
 import signal
@@ -419,14 +425,14 @@ class TestNotesConcurrentAccess:
                 idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"notes": []}
                 idx["notes"].append({"id": "n1", "path": "a.md"})
                 time.sleep(0.1)
-                atomic_write(idx_path, json.dumps(idx))
+                atomic_write(idx_path, json.dumps(idx), _nested_lock=True)
 
         def writer_2() -> None:
             with FileLock(lock_path, timeout=10):
                 idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"notes": []}
                 idx["notes"].append({"id": "n2", "path": "b.md"})
                 time.sleep(0.1)
-                atomic_write(idx_path, json.dumps(idx))
+                atomic_write(idx_path, json.dumps(idx), _nested_lock=True)
 
         t1 = threading.Thread(target=writer_1)
         t2 = threading.Thread(target=writer_2)

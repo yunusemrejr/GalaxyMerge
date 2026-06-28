@@ -1,4 +1,8 @@
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 from pathlib import Path
 
 from galaxy_merge.app.server import build_locations_payload

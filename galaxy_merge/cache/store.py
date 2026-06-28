@@ -37,7 +37,7 @@ class CacheStore:
         data = {"value": value, "_expires": expires, "_created": time.time()}
         path = self._key_path(key)
         with FileLock(path.with_suffix(".lock"), timeout=5.0):
-            atomic_write(path, json.dumps(data, default=str))
+            atomic_write(path, json.dumps(data, default=str), _nested_lock=True)
 
     def invalidate(self, key: str) -> None:
         path = self._key_path(key)

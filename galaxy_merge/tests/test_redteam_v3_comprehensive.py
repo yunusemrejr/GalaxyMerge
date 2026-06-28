@@ -27,7 +27,11 @@ Tests cover every attack vector requested:
 
 Every test asserts that UNSAFE actions are BLOCKED and safe actions are ALLOWED.
 """
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 import os
 import json
 import tempfile
@@ -1727,7 +1731,7 @@ class TestSandboxSecurity:
 
     def test_sandbox_timeout(self, workroot):
         sandbox = Sandbox(workroot)
-        result = sandbox.run("sleep 10", timeout_seconds=1)
+        result = sandbox.run("sleep 10", timeout_seconds=0.5)
         assert result["status"] == "timeout"
 
     def test_sandbox_runs_simple_command(self, workroot):

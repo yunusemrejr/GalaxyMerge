@@ -1,4 +1,8 @@
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 
 from galaxy_merge.fusion.synthesizer import Synthesizer
 from galaxy_merge.fusion.scoring import score_finding, rank_findings, has_high_severity_blockers

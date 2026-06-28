@@ -3,7 +3,11 @@
 Tests the actual public API of the safety modules.
 """
 
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 from pathlib import Path
 from galaxy_merge.safety.path_policy import PathPolicy
 from galaxy_merge.safety.command_policy import CommandPolicy, BLOCKED_COMMANDS

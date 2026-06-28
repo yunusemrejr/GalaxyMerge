@@ -1,4 +1,8 @@
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 from pathlib import Path
 
 from galaxy_merge.workspace.root import detect_language, detect_framework, detect_test_command

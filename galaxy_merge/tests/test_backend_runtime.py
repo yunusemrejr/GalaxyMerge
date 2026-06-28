@@ -6,6 +6,12 @@ session isolation, WebSocket broadcast safety, goal cancellation,
 safety boundaries, session-scoped notes injection, and atomic writes.
 """
 
+
+import pytest
+
+pytestmark = [pytest.mark.integration]
+
+
 import asyncio
 import json
 import os
@@ -670,17 +676,17 @@ class TestFileLock:
 
         def hold_lock():
             with FileLock(lock_path, timeout=30.0):
-                time.sleep(2)
+                time.sleep(0.5)
 
         t = threading.Thread(target=hold_lock)
         t.start()
-        time.sleep(0.1)
+        time.sleep(0.05)
 
         with pytest.raises(LockTimeout):
-            with FileLock(lock_path, timeout=0.5):
+            with FileLock(lock_path, timeout=0.2):
                 pass
 
-        t.join(timeout=5)
+        t.join(timeout=3)
 
 
 # =============================================================================
@@ -725,7 +731,7 @@ class TestParallelSessionConflict:
         with FileLock(lock_path, timeout=5.0):
             content = target.read_text()
             assert content == "v1"
-            atomic_write(target, "v2")
+            atomic_write(target, "v2", _nested_lock=True)
 
         assert target.read_text() == "v2"
 

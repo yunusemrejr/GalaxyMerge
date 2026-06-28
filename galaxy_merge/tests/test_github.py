@@ -1,4 +1,8 @@
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 from galaxy_merge.github.scanner import GitHubScanner
 
 

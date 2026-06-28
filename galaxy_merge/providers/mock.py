@@ -36,6 +36,7 @@ class MockProvider(ProviderBase):
         temperature: float = 0.7,
         max_tokens: int | None = None,
         stream: bool = False,
+        **kwargs,
     ) -> dict[str, Any]:
         if self._delay > 0:
             await asyncio.sleep(self._delay)

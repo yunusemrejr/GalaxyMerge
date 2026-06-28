@@ -1,7 +1,11 @@
+
+
 import json
 from pathlib import Path
 
 import pytest
+
+pytestmark = [pytest.mark.integration]
 
 from galaxy_merge.app.server import SessionServer, _build_tree, build_logs_payload, build_notes_payload
 from galaxy_merge.core.session import Session, init_gm_dir

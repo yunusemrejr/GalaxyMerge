@@ -42,7 +42,7 @@ class MemoryStore:
             if prefs_path.exists():
                 prefs = json.loads(prefs_path.read_text())
             prefs[key] = value
-            atomic_write(prefs_path, json.dumps(prefs, indent=2))
+            atomic_write(prefs_path, json.dumps(prefs, indent=2), _nested_lock=True)
 
     def get_preference(self, key: str, default: Any = None) -> Any:
         prefs_path = self.memory_dir / "preferences.json"

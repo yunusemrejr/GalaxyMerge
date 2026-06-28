@@ -16,6 +16,12 @@ Covers:
 - gm doctor reports useful diagnostics
 - Ctrl+C shuts down cleanly
 """
+
+import pytest
+
+pytestmark = [pytest.mark.integration]
+
+
 import json
 import os
 import re

@@ -3,7 +3,11 @@
 Focused tests for the cache module's key functions and CacheStore class.
 """
 
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 import json
 import time
 from pathlib import Path
@@ -32,20 +36,56 @@ class TestCacheKeys:
         assert key1 != key2
 
     def test_file_cache_key_format(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
         key = file_cache_key("proj123", "/src/main.py", "sha256abc")
-        assert key.startswith("file:proj123:/src/main.py:sha256abc:")
+        # Key is now a full SHA-256 hash (32 hex chars)
+        assert len(key) == 32
+        assert all(c in "0123456789abcdef" for c in key)
 
-    def test_skill_cache_key_format(self):
+    def test_file_cache_key_deterministic(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
+        key1 = file_cache_key("proj123", "/src/main.py", "sha256abc")
+        key2 = file_cache_key("proj123", "/src/main.py", "sha256abc")
+        assert key1 == key2
+
+    def test_file_cache_key_different_inputs_different_key(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
+        key1 = file_cache_key("proj123", "/src/main.py", "sha256abc")
+        key2 = file_cache_key("proj123", "/src/main.py", "sha256xyz")
+        assert key1 != key2
+
+    def test_skill_cache_key_deterministic(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
         key = skill_cache_key("proj123", "how to fix bug")
-        assert key.startswith("skill:proj123:how to fix bug:")
+        assert len(key) == 32
 
-    def test_fusion_cache_key_format(self):
+    def test_fusion_cache_key_deterministic(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
         key = fusion_cache_key("goalhash123", "council")
-        assert key.startswith("fusion:council:goalhash123:")
+        assert len(key) == 32
 
-    def test_web_cache_key_format(self):
+    def test_web_cache_key_deterministic(self):
+        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        set_workroot_hash("wr123")
+        set_config_hash("cfg456")
+        set_safety_policy_hash("safe789")
         key = web_cache_key("duckduckgo", "python tutorial")
-        assert key.startswith("web:duckduckgo:")
+        assert len(key) == 32
 
     def test_hash_messages_deterministic(self):
         messages = [
@@ -113,7 +153,7 @@ class TestCacheStore:
     def test_cache_store_ttl_expiration(self, tmp_path):
         cache_dir = tmp_path / "cache"
         store = CacheStore(cache_dir)
-        store.set("expiring_key", "value", ttl_seconds=1)
+        store.set("expiring_key", "value", ttl_seconds=0.1)
         assert store.get("expiring_key") == "value"
-        time.sleep(1.5)
+        time.sleep(0.15)
         assert store.get("expiring_key") is None

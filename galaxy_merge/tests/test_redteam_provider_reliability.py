@@ -4,6 +4,12 @@ Red-team: Provider/Council/Fusion reliability.
 Simulates every failure mode listed in the red-team spec and verifies
 council behavior, event logging, fallback, timeout, degraded mode, etc.
 """
+
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
+
 import asyncio
 import json
 import re
@@ -72,7 +78,7 @@ class MockFailureProvider(ProviderBase):
     def set_healthy(self, healthy: bool):
         self._healthy = healthy
 
-    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False):
+    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs):
         if self._delay > 0:
             await asyncio.sleep(self._delay)
 

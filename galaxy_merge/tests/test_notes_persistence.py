@@ -5,9 +5,13 @@ Tests every requirement: create, read, edit, rename, delete, restore version,
 list, search, tag, pin, inject into goal context, note-role tracking,
 persistence across restarts, .gm/notes/ storage, separation from memory.
 """
+
+
 import json
 from pathlib import Path
 import pytest
+
+pytestmark = [pytest.mark.unit]
 
 from galaxy_merge.core.session import init_gm_dir, Session
 from galaxy_merge.tools.notes_tools import make_notes_tools, get_injected_notes, clear_goal_injections

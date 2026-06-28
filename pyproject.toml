@@ -14,6 +14,7 @@ dependencies = [
     "beautifulsoup4>=4.14.0",
     "lxml>=5.0.0",
     "pytest-timeout>=2.4.0",
+    "pytest-asyncio>=0.24.0",
 ]
 
 [project.scripts]
@@ -29,3 +30,15 @@ packages = ["galaxy_merge"]
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["galaxy_merge/tests"]
+timeout = 15
+timeout_method = "thread"
+addopts = "--strict-markers -m 'not network and not browser and not provider and not slow'"
+markers = [
+    "unit: Fast pure-logic tests (no network, no subprocess, no browser).",
+    "integration: Backend/API/tool interaction tests with temp filesystems.",
+    "e2e: Full gm smoke flows with real subprocesses.",
+    "slow: Tests that take longer than 10 seconds.",
+    "browser: Tests requiring Playwright/Selenium or real browser automation.",
+    "network: Tests making real network calls (web search, GitHub API).",
+    "provider: Tests requiring real LLM provider connections.",
+]

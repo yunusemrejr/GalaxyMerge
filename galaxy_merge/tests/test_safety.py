@@ -1,6 +1,10 @@
+
+
 import tempfile
 from pathlib import Path
 import pytest
+
+pytestmark = [pytest.mark.unit]
 
 from galaxy_merge.safety.path_policy import PathPolicy
 from galaxy_merge.safety.command_policy import CommandPolicy

@@ -1,3 +1,9 @@
+
+import pytest
+
+pytestmark = [pytest.mark.unit]
+
+
 from galaxy_merge.fusion.synthesizer import Synthesizer
 
 

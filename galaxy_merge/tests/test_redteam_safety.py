@@ -2,7 +2,11 @@
 Red-team safety tests: attempt every known bypass technique against the Safety Governor.
 All attacks MUST be blocked. If any test fails, a safety boundary has been breached.
 """
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 import os
 import tempfile
 from pathlib import Path
@@ -427,7 +431,7 @@ class TestSandboxSecurity:
 
     def test_sandbox_timeout(self, workroot):
         sandbox = Sandbox(workroot)
-        result = sandbox.run("sleep 10", timeout_seconds=1)
+        result = sandbox.run("sleep 10", timeout_seconds=0.5)
         assert result["status"] == "timeout"
 
 

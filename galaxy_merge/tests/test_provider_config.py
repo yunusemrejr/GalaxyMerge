@@ -1,7 +1,11 @@
 """Unit tests for core config loading and validation."""
 
+
+
 import json
 import pytest
+
+pytestmark = [pytest.mark.unit]
 from pathlib import Path
 from galaxy_merge.core.config import load_json, save_json, load_app_config, save_app_config, AppConfig
 

@@ -1,6 +1,10 @@
+
+
 from pathlib import Path
 
 import pytest
+
+pytestmark = [pytest.mark.integration]
 
 from galaxy_merge.app.server import (
     SessionServer,

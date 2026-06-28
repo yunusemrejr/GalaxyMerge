@@ -1,3 +1,9 @@
+
+import pytest
+
+pytestmark = [pytest.mark.integration]
+
+
 import json
 import subprocess
 from pathlib import Path
@@ -70,6 +76,7 @@ def test_public_example_configs_are_placeholder_only() -> None:
     assert not any(provider_name in model_text for provider_name in local_provider_names)
 
 
+@pytest.mark.integration
 def test_fallback_secret_scan_accepts_public_candidate_set() -> None:
     # Given: the repository has fake red-team strings and placeholder examples.
     script = REPO_ROOT / "scripts" / "secret_scan.sh"
@@ -81,6 +88,7 @@ def test_fallback_secret_scan_accepts_public_candidate_set() -> None:
     assert result.returncode == 0, result.stderr
 
 
+@pytest.mark.integration
 def test_fallback_secret_scan_accepts_git_history() -> None:
     # Given: public history may contain more than one commit.
     script = REPO_ROOT / "scripts" / "secret_scan.sh"
