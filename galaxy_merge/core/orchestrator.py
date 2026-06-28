@@ -128,6 +128,10 @@ class Orchestrator:
         for schema, handler in make_location_tools(self.session.workroot, self.session.gm_dir, self.install_dir):
             self.tool_kernel.register(schema, handler)
 
+        from galaxy_merge.tools.security_tools import make_security_tools
+        for schema, handler in make_security_tools(self.session.workroot, self.install_dir):
+            self.tool_kernel.register(schema, handler)
+
         from galaxy_merge.tools.browser_tools import make_browser_tools
         for schema, handler in make_browser_tools(self.session.gm_dir, self.session.session_id):
             self.tool_kernel.register(schema, handler)

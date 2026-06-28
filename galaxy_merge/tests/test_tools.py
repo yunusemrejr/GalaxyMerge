@@ -61,3 +61,27 @@ class TestToolKernel:
             result = await kernel.execute("nonexistent")
             assert result.success is False
             assert "unknown tool" in result.error
+
+    @pytest.mark.asyncio
+    async def test_required_public_safety_tools_are_registered(self, tmp_path):
+        # Given: an initialized orchestrator tool registry.
+        from galaxy_merge.core.orchestrator import Orchestrator
+        from galaxy_merge.core.session import Session, init_gm_dir
+
+        init_gm_dir(tmp_path)
+        session = Session(tmp_path)
+        session.save_state()
+        repo_root = Path(__file__).resolve().parents[2]
+        orchestrator = Orchestrator(
+            session,
+            repo_root / "config",
+            repo_root,
+        )
+
+        # When: the native tool schemas are listed.
+        await orchestrator.initialize()
+        tools = {tool["name"] for tool in orchestrator.tool_kernel.list_tools()}
+
+        # Then: public release safety is available inside the native tool kernel.
+        assert "secret.scan" in tools
+        assert "repo.public_safety.audit" in tools

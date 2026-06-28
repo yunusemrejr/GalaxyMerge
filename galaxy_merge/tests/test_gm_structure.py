@@ -67,6 +67,7 @@ class TestInitGmDirStructure:
         assert (tmp_path / ".gm" / subpath).is_dir()
 
     @pytest.mark.parametrize("filepath", [
+        "README.md",
         "project.json",
         "notes/index.json",
         "safety/policy.snapshot.json",
