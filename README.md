@@ -185,11 +185,57 @@ User projects and their `.gm/` directories are never touched by uninstall.
 ## Verification
 
 ```bash
-uv run pytest
+# Run unit tests (quick)
+uv run pytest galaxy_merge/tests/test_gm_structure.py galaxy_merge/tests/test_config.py -v
+
+# Run new safety, config, and cache tests
+uv run pytest galaxy_merge/tests/test_safety_governor.py galaxy_merge/tests/test_provider_config.py galaxy_merge/tests/test_cache.py -v
+
+# Run full smoke test (end-to-end, ~30s)
 ./scripts/smoke_test.sh
+
+# Secret scan
 ./scripts/secret_scan.sh
 python scripts/secret_scan.py
 ```
+
+### CI
+
+The CI pipeline (`.github/workflows/ci.yml`) runs on every push and PR:
+- Unit tests (excluding slow integration/redteam suites)
+- Smoke test
+- Secret scan
+- Repository hygiene checks (no `.gm/` or `.env` tracked, config examples clean)
+
+## Testing Coverage
+
+The test suite covers these layers:
+
+**Unit tests:**
+- `.gm/` structure creation and validation
+- Notes CRUD operations with index management
+- Safety Governor path and command policies
+- Credential redaction
+- Cache key generation and TTL expiration
+- Config loading and validation
+- Session isolation
+- Event logging format
+
+**Integration tests:**
+- `gm` launcher creates session state
+- Backend starts on localhost with port fallback
+- WebSocket event streaming
+- GUI API endpoints
+- Provider degradation handling
+- Concurrent session management
+
+**Smoke tests (E2E):**
+- Full `gm` lifecycle from a generated project
+- `.gm/` directory structure verification
+- API endpoint responsiveness
+- Goal execution and event persistence
+- Clean shutdown and crash recovery
+- Secret safety in generated logs
 
 ## Project Notes
 

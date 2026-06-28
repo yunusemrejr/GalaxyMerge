@@ -1,0 +1,68 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install uv
+        run: pip install uv
+
+      - name: Install dependencies
+        run: uv sync
+
+      - name: Run unit tests
+        run: uv run pytest galaxy_merge/tests/ -v --tb=short -x --ignore=galaxy_merge/tests/test_backend_runtime.py --ignore=galaxy_merge/tests/test_redteam_v3_comprehensive.py --ignore=galaxy_merge/tests/test_redteam_provider_reliability.py --ignore=galaxy_merge/tests/test_concurrency.py --ignore=galaxy_merge/tests/test_fusion_council.py
+
+      - name: Run smoke test
+        run: ./scripts/smoke_test.sh
+
+      - name: Secret scan
+        run: ./scripts/secret_scan.sh --history
+
+  security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Run secret scan
+        run: ./scripts/secret_scan.sh --history
+
+  repo-hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check for tracked .gm/ or .env
+        run: |
+          if git ls-files --error-unmatch .gm/ 2>/dev/null; then
+            echo "FAIL: .gm/ is tracked in git"
+            exit 1
+          fi
+          if git ls-files --error-unmatch .env 2>/dev/null; then
+            echo "FAIL: .env is tracked in git"
+            exit 1
+          fi
+          echo "PASS: .gm/ and .env are properly ignored"
+      - name: Check config examples use placeholders
+        run: |
+          for f in config/*.example.json; do
+            if grep -qE '(sk-[a-zA-Z0-9]{20,}|ghp_[a-zA-Z0-9]{20,}|sk-ant-[a-zA-Z0-9-]{20,})' "$f"; then
+              echo "FAIL: $f contains real-looking keys"
+              exit 1
+            fi
+          done
+          echo "PASS: Config examples contain no real-looking keys"
