@@ -9,6 +9,7 @@ from galaxy_merge.app.lifecycle import print_boot_log, shutdown
 from galaxy_merge.core.session import detect_workroot, init_gm_dir, Session
 from galaxy_merge.core.config import load_app_config, save_app_config, AppConfig
 from galaxy_merge.core.errors import GalaxyMergeError
+from galaxy_merge.safety.self_protection import SelfProtectionPolicy
 from galaxy_merge.core.concurrency import (
     cleanup_stale_sessions,
     register_active_session,
@@ -17,6 +18,45 @@ from galaxy_merge.core.concurrency import (
 )
 
 VERSION = "0.1.0"
+
+
+def _detect_install_dir() -> Path | None:
+    try:
+        import galaxy_merge
+        pkg_path = Path(galaxy_merge.__file__).resolve().parent
+        install_dir = pkg_path.parent
+        if (install_dir / "pyproject.toml").exists() or (install_dir / "gm").exists():
+            return install_dir
+    except Exception:
+        pass
+    return None
+
+
+def _is_inside_galaxy_merge_codebase(workroot: Path) -> bool:
+    install_dir = _detect_install_dir()
+    if not install_dir:
+        return False
+    try:
+        return workroot.resolve().is_relative_to(install_dir.resolve())
+    except (ValueError, AttributeError):
+        return False
+
+
+def print_self_codebase_warning() -> None:
+    print("", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("Galaxy Merge detected that it was launched", file=sys.stderr)
+    print("inside its own source tree.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("Normal autonomous mode is disabled here.", file=sys.stderr)
+    print("Read-only diagnostic mode is active.", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("To use Galaxy Merge on a project:", file=sys.stderr)
+    print("", file=sys.stderr)
+    print("  cd /path/to/your/project", file=sys.stderr)
+    print("  gm", file=sys.stderr)
+    print("=" * 60, file=sys.stderr)
+    print("", file=sys.stderr)
 
 
 class Launcher:
@@ -47,6 +87,10 @@ class Launcher:
                 file=sys.stderr,
             )
             return 1
+
+        inside_own_codebase = _is_inside_galaxy_merge_codebase(workroot)
+        if inside_own_codebase:
+            print_self_codebase_warning()
 
         init_gm_dir(workroot)
         upgrade_concurrency(workroot / ".gm")

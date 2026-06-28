@@ -13,33 +13,174 @@ git remote set-url origin https://github.com/yunusemrejr/GalaxyMerge
 
 The repository at `https://github.com/yunusemrejr/GalaxyMerge` is public and is expected to remain public. Do not commit or push secrets, credentials, private keys, tokens, provider API keys, `.env` files, customer data, machine-local configuration, or other sensitive material.
 
-Engineers and agents working in this checkout should keep the GitHub repo updated. After local verification, commit focused changes and push them to `origin` unless the user explicitly asks for local-only work.
+## Install and Use
 
-Provider/config JSON files are local-only. Do not push `providers.json`, model/routing/fusion config JSON, endpoint lists, remote targets, credential JSON, or any derived provider configuration to the public repo.
+### Important: Two Folders
 
-## Quick Start
+Galaxy Merge uses **two separate folders**:
 
-```bash
-uv sync
-uv run gm --help
+```
+~/Desktop/Galaxymerge/     = Galaxy Merge app/source/install folder
+~/Desktop/MyProject/       = target project you want Galaxy Merge to work on
 ```
 
-## Local Provider Configuration
+**Do not run normal autonomous work inside the Galaxy Merge source tree.**
+Running `gm` from the Galaxy Merge source tree enters read-only diagnostic mode.
 
-Public config examples live in `config/*.example.json`. Copy them into a
-local-only config directory before filling provider metadata:
+### Quick Install
 
 ```bash
-mkdir -p config_templates
-cp config/providers.example.json config_templates/providers.json
-cp config/models.example.json config_templates/models.json
-cp config/fusion.example.json config_templates/fusion.json
-cp config/routing.example.json config_templates/routing.json
+cd ~/Desktop
+git clone https://github.com/yunusemrejr/GalaxyMerge.git Galaxymerge
+cd Galaxymerge
+./scripts/install_local.sh
 ```
 
-Keep real API keys in exported environment variables such as
-`GM_EXAMPLE_PROVIDER_API_KEY`. Do not commit filled provider configs, endpoint
-lists, routing/model choices, `.env` files, logs, or `.gm/` state.
+The install script will:
+- Check Python >= 3.12
+- Create a local `.venv/` virtual environment
+- Install all Python dependencies
+- Create a `gm` launcher at `~/.local/bin/gm`
+- Set up config templates
+- Check PATH configuration
+
+### Use on a Project
+
+After installing, navigate to **any project directory** and run `gm`:
+
+```bash
+cd ~/Desktop/MyProject
+gm
+```
+
+Galaxy Merge will:
+1. Detect the project's WorkRoot
+2. Create `.gm/` runtime state in your project
+3. Start the backend server on localhost
+4. Open the browser GUI
+5. Stream logs to the terminal
+6. Shut down cleanly on Ctrl+C
+
+### Diagnostics
+
+```bash
+gm --doctor
+```
+
+Checks Python version, packages, launcher health, config files, provider keys,
+secret safety, and PATH configuration.
+
+### Version
+
+```bash
+gm --version
+```
+
+## Self-Codebase Protection
+
+If you run `gm` inside the Galaxy Merge source tree:
+
+```bash
+cd ~/Desktop/Galaxymerge
+gm
+```
+
+Galaxy Merge detects this and enters **read-only diagnostic mode**:
+
+- File writes are disabled
+- File patches are disabled
+- Mutating shell commands are disabled
+- Git mutations are disabled
+- Read/index/diagnose operations are allowed
+- Terminal shows a warning with instructions
+
+To use Galaxy Merge on a project:
+
+```bash
+cd /path/to/your/project
+gm
+```
+
+## Provider Configuration
+
+Galaxy Merge reads provider keys from **environment variables**. No keys are
+committed to the repository.
+
+### Supported Environment Variables
+
+```bash
+OPENAI_API_KEY
+ANTHROPIC_API_KEY
+GOOGLE_API_KEY
+DEEPSEEK_API_KEY
+MINIMAX_API_KEY
+STREAMLAKE_API_KEY
+STEPFUN_API_KEY
+OPENROUTER_API_KEY
+GITHUB_TOKEN
+GH_TOKEN
+```
+
+### Setting Keys
+
+Export them in your shell profile (`~/.bashrc` or `~/.zshrc`):
+
+```bash
+export OPENAI_API_KEY="sk-..."
+export ANTHROPIC_API_KEY="sk-ant-..."
+```
+
+Or create a `.env` file in your project (never commit it):
+
+```bash
+cp ~/Desktop/Galaxymerge/.env.example .env
+# Edit .env with your keys
+```
+
+### Missing Keys
+
+Missing keys do **not** crash the harness. Providers without keys are marked
+unavailable. The GUI shows provider availability. The terminal shows
+loaded/available/unavailable provider counts.
+
+### Config Templates
+
+Public config examples live in `config/*.example.json`. During install,
+they are copied to `galaxy_merge/config_templates/` for local use.
+
+```bash
+config/providers.example.json
+config/models.example.json
+config/fusion.example.json
+config/routing.example.json
+```
+
+All examples use placeholders only — no real keys or endpoints.
+
+## Runtime State
+
+- `.gm/` is project-local runtime state (sessions, notes, memory, caches, logs)
+- `.gm/` is intentionally ignored by Git
+- `.gm/` should not be committed unless intentionally using fake schema examples
+- Terminal owns runtime logs
+- Browser GUI is the main interaction surface
+
+## Uninstall
+
+```bash
+./scripts/uninstall_local.sh
+```
+
+Or manually:
+
+```bash
+rm ~/.local/bin/gm
+rm -rf ~/.config/galaxy-merge
+rm -rf ~/.local/share/galaxy-merge
+# Optional: rm -rf ~/Desktop/Galaxymerge/.venv
+```
+
+User projects and their `.gm/` directories are never touched by uninstall.
 
 ## Verification
 
@@ -47,6 +188,7 @@ lists, routing/model choices, `.env` files, logs, or `.gm/` state.
 uv run pytest
 ./scripts/smoke_test.sh
 ./scripts/secret_scan.sh
+python scripts/secret_scan.py
 ```
 
 ## Project Notes
