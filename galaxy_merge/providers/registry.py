@@ -5,9 +5,9 @@ from pathlib import Path
 from typing import Any
 
 from galaxy_merge.providers.base import ProviderBase
-from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
 from galaxy_merge.providers.local_ollama import OllamaProvider
 from galaxy_merge.providers.mock import MockProvider
+from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
 from galaxy_merge.safety.credential_policy import redact_text
 
 logger = logging.getLogger("galaxy_merge.providers")
@@ -171,6 +171,11 @@ class ProviderRegistry:
         self._session_id = session_id
 
     def load(self) -> None:
+        # ── Lazy imports: avoid loading httpx at module level ──────
+        from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
+        from galaxy_merge.providers.local_ollama import OllamaProvider
+        from galaxy_merge.providers.mock import MockProvider
+
         self._providers.clear()
         self._models.clear()
         self._load_errors.clear()

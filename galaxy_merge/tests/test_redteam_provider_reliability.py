@@ -185,7 +185,10 @@ def config_dir(tmp_path):
 def _make_minimal_fusion_config():
     return {
         "max_parallel_calls": 4,
-        "timeout_seconds": 30,
+        "timeout_seconds": 5,
+        "retry_count": 1,
+        "retry_backoff": 0,
+        "retry_backoff_max": 0,
         "roles": {
             "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
             "scout": {"required": True, "model_selector": {"role": "scout", "cost_policy": "cheap"}},
@@ -216,7 +219,16 @@ def _setup_multi_provider_config(config_dir, event_log=None):
             "mock_c:planner": {"provider": "mock_c", "model": "mock-v3", "enabled": True, "context_window": 32000, "strengths": ["planning"], "roles": ["planner", "synthesizer"]},
             "mock_a:scout": {"provider": "mock_a", "model": "mock-s1", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
             "mock_b:scout": {"provider": "mock_b", "model": "mock-s2", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
-
+            "mock_c:scout": {"provider": "mock_c", "model": "mock-s3", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
+            "mock_a:implementer": {"provider": "mock_a", "model": "mock-i1", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
+            "mock_b:implementer": {"provider": "mock_b", "model": "mock-i2", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
+            "mock_c:implementer": {"provider": "mock_c", "model": "mock-i3", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
+            "mock_a:reviewer": {"provider": "mock_a", "model": "mock-r1", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
+            "mock_b:reviewer": {"provider": "mock_b", "model": "mock-r2", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
+            "mock_c:reviewer": {"provider": "mock_c", "model": "mock-r3", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
+            "mock_a:skeptic": {"provider": "mock_a", "model": "mock-sk1", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
+            "mock_b:skeptic": {"provider": "mock_b", "model": "mock-sk2", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
+            "mock_c:skeptic": {"provider": "mock_c", "model": "mock-sk3", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
         }
     }
     (config_dir / "models.json").write_text(json.dumps(models_json))
@@ -777,16 +789,18 @@ class TestTimeoutAndRetry:
         council = _create_council(registry, config)
         mock_prov = registry.get("mock")
         # Make provider extremely slow
-        mock_prov.set_delay(999)
+        # Delay longer than council timeout so the council must time out,
+        # not hang.  A small delay suffices — no need for 999s.
+        mock_prov.set_delay(2)
         mock_prov.set_role_failure("planner", "timeout")
         for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         start = time.monotonic()
         try:
-            results = await asyncio.wait_for(council.execute(), timeout=30)
+            results = await asyncio.wait_for(council.execute(), timeout=5)
             elapsed = time.monotonic() - start
-            assert elapsed < 25, f"No infinite wait: completed in {elapsed}s"
+            assert elapsed < 4, f"No infinite wait: completed in {elapsed}s"
         except asyncio.TimeoutError:
             pytest.fail("Council.execute() hung indefinitely")
 
@@ -908,7 +922,10 @@ class TestEventLoggingForFailures:
         """Event log includes provider, model, role, error type."""
         _setup_single_mock_config(config_dir)
         registry = _create_registry(config_dir, event_log)
-        council = _create_council(registry)
+        # Use config with retry_count=3 to match test assertions
+        config = _make_minimal_fusion_config()
+        config["retry_count"] = 3
+        council = _create_council(registry, config)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "http_500")
         for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:

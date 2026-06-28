@@ -109,14 +109,17 @@ class Council:
 
         max_retries = self.config.get("retry_count", 3)
         start = time.monotonic()
+        # Track per-provider retry attempts
+        provider_retry_count: dict[str, int] = {}
+        tried_providers: set[str] = set()
 
-        for attempt in range(max_retries):
+        while True:
             provider = self.providers.get(provider_id)
             if not provider:
                 return {"role": role_name, "error": "provider not available"}
 
             if not provider.healthy:
-                next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                next_best = self._find_fallback(role_name, provider_id, cost_policy, exclude=tried_providers)
                 if next_best:
                     provider_id, model, _ = next_best
                     provider = self.providers.get(provider_id)
@@ -126,7 +129,7 @@ class Council:
                         provider_id,
                         model,
                         "no healthy provider available",
-                        0,
+                        provider_retry_count.get(provider_id, 0),
                         start,
                     )
                     return {"role": role_name, "error": "no healthy provider available"}
@@ -139,6 +142,7 @@ class Council:
             messages = stable_prefix + dynamic_sections
 
             per_role_timeout = self.config.get("per_role_timeout", self.timeout)
+            total_attempts = sum(provider_retry_count.values())
             if self.event_log:
                 self.event_log.emit(
                     "provider_called",
@@ -147,7 +151,7 @@ class Council:
                     provider_id=provider_id,
                     provider=provider_id,
                     model=model,
-                    attempt=attempt + 1,
+                    attempt=total_attempts + 1,
                     timeout_seconds=per_role_timeout,
                 )
             try:
@@ -171,19 +175,20 @@ class Council:
                 required_fields = schema.get("required", [])
                 missing_fields = [f for f in required_fields if f not in parsed or not parsed.get(f)]
                 if missing_fields:
-                    errors.append(f"attempt {attempt + 1}: missing required fields {missing_fields}")
+                    provider_retry_count[provider_id] = provider_retry_count.get(provider_id, 0) + 1
+                    errors.append(f"attempt {total_attempts + 1}: missing required fields {missing_fields}")
                     self._emit_provider_failed(
                         role_name,
                         provider_id,
                         model,
                         f"schema validation: missing {missing_fields}",
-                        attempt + 1,
+                        provider_retry_count[provider_id],
                         start,
                     )
-                    next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                    next_best = self._find_fallback(role_name, provider_id, cost_policy, exclude=tried_providers)
                     if next_best:
                         provider_id, model, _ = next_best
-                        backoff = self.config.get("retry_backoff", 1.0) * (2 ** attempt)
+                        backoff = self.config.get("retry_backoff", 1.0) * (2 ** (provider_retry_count.get(provider_id, 0)))
                         capped_backoff = min(backoff, self.config.get("retry_backoff_max", 30.0))
                         await asyncio.sleep(capped_backoff)
                         continue
@@ -195,41 +200,52 @@ class Council:
                     "parsed": parsed,
                     "model": result.get("model", model),
                     "provider": provider_id,
-                    "attempt": attempt + 1,
+                    "attempt": total_attempts + 1,
                 }
             else:
                 error_msg = result.get("error", "unknown")
-                errors.append(f"attempt {attempt + 1}: {error_msg}")
-                self._emit_provider_failed(role_name, provider_id, model, error_msg, attempt + 1, start)
+                provider_retry_count[provider_id] = provider_retry_count.get(provider_id, 0) + 1
+                errors.append(f"attempt {total_attempts + 1}: {error_msg}")
+                self._emit_provider_failed(role_name, provider_id, model, error_msg, provider_retry_count[provider_id], start)
                 # Mark unhealthy to prevent cycling back to failed providers
                 self.providers.mark_unhealthy(
                     provider_id,
                     model=model,
                     role=role_name,
                     error=error_msg,
-                    attempt=attempt + 1,
+                    attempt=provider_retry_count[provider_id],
                     duration_ms=self._elapsed_ms(start),
                     retry_count=max_retries,
-                    fallback_decision="pending" if attempt + 1 < max_retries else "exhausted",
+                    fallback_decision="pending",
                 )
+                tried_providers.add(provider_id)
 
-                next_best = self._find_fallback(role_name, provider_id, cost_policy)
+                # First, try retrying the same provider if under max_retries
+                if provider_retry_count[provider_id] < max_retries:
+                    backoff = self.config.get("retry_backoff", 1.0) * (2 ** (provider_retry_count[provider_id] - 1))
+                    capped_backoff = min(backoff, self.config.get("retry_backoff_max", 30.0))
+                    logger.info("Role %s retrying %s (attempt %d)", role_name, provider_id, provider_retry_count[provider_id] + 1)
+                    await asyncio.sleep(capped_backoff)
+                    continue
+
+                # Provider exhausted its retries, try fallback to a new provider
+                next_best = self._find_fallback(role_name, provider_id, cost_policy, exclude=tried_providers)
                 if next_best:
                     provider_id, model, _ = next_best
+                    logger.info("Role %s falling back to %s", role_name, provider_id)
+                    await asyncio.sleep(self.config.get("retry_backoff", 1.0))
+                    continue
                 else:
                     break
-
-                backoff = self.config.get("retry_backoff", 1.0) * (2 ** attempt)
-                capped_backoff = min(backoff, self.config.get("retry_backoff_max", 30.0))
-                logger.info("Role %s retry %d after %0.1fs backoff", role_name, attempt + 1, capped_backoff)
-                await asyncio.sleep(capped_backoff)
 
         self._emit_provider_failed(role_name, provider_id, model, "; ".join(errors), max_retries, start)
         return {"role": role_name, "error": "; ".join(errors)}
 
-    def _find_fallback(self, role_name: str, failed_provider: str, cost_policy: str) -> tuple[str, str, dict[str, Any]] | None:
+    def _find_fallback(self, role_name: str, failed_provider: str, cost_policy: str, exclude: set[str] | None = None) -> tuple[str, str, dict[str, Any]] | None:
         candidates = self.providers.get_models_for_role(role_name)
         tried = {failed_provider}
+        if exclude:
+            tried.update(exclude)
         for provider_id, model, model_config in candidates:
             if provider_id in tried:
                 continue
