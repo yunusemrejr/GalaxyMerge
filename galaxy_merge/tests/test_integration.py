@@ -3,6 +3,7 @@ from pathlib import Path
 import pytest
 
 from galaxy_merge.app.server import SessionServer, _build_tree, build_locations_payload, build_logs_payload, build_notes_payload
+from galaxy_merge.app.launcher import Launcher
 from galaxy_merge.core.session import Session, init_gm_dir
 
 
@@ -42,6 +43,44 @@ class TestSessionServer:
 
     def test_project_file_exists_after_init(self, session: Session) -> None:
         assert (session.gm_dir / "project.json").exists()
+
+
+class TestLauncher:
+    def test_launcher_opens_browser_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        opened = []
+
+        class FakeServer:
+            def serve(self) -> None:
+                return None
+
+        def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
+            return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}
+
+        monkeypatch.setattr("galaxy_merge.app.launcher.start_server", fake_start_server)
+        monkeypatch.setattr("galaxy_merge.app.launcher.open_browser", opened.append)
+
+        result = Launcher(project_dir=str(tmp_path)).run()
+
+        assert result == 0
+        assert opened == ["http://127.0.0.1:43210/"]
+
+    def test_launcher_respects_no_browser(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        opened = []
+
+        class FakeServer:
+            def serve(self) -> None:
+                return None
+
+        def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
+            return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}
+
+        monkeypatch.setattr("galaxy_merge.app.launcher.start_server", fake_start_server)
+        monkeypatch.setattr("galaxy_merge.app.launcher.open_browser", opened.append)
+
+        result = Launcher(project_dir=str(tmp_path), no_browser=True).run()
+
+        assert result == 0
+        assert opened == []
 
 
 class TestPayloadBuilders:
