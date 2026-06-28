@@ -2,7 +2,11 @@
 Red-team safety tests V2: Cover every bypass found during security audit.
 All attacks MUST be blocked. If any test fails, a safety boundary has been breached.
 """
+
+
 import pytest
+
+pytestmark = [pytest.mark.unit]
 import os
 import tempfile
 from pathlib import Path
@@ -161,6 +165,21 @@ class TestDdVariantBypasses:
 
     def test_block_dd_block_size_variant(self, gov):
         assert gov.check_command("dd bs=4M if=/dev/zero of=/etc/cron.d/evil")["decision"] == "block"
+
+    def test_block_dd_read_system_device_to_safe_output(self, gov):
+        """dd if=/dev/sda of=/tmp/backup.img must block even when of= is safe.
+
+        Reading raw system devices is itself dangerous regardless of the
+        destination. The old check only inspected ``of=`` once a non-system
+        ``of=`` was present, silently skipping the ``if=`` system check.
+        """
+        assert gov.check_command("dd if=/dev/sda of=/tmp/backup.img")["decision"] == "block"
+
+    def test_block_dd_read_system_partition_to_safe_output(self, gov):
+        assert gov.check_command("dd if=/dev/sda1 of=/tmp/x.img")["decision"] == "block"
+
+    def test_block_dd_if_system_even_when_of_safe(self, gov):
+        assert gov.check_command("dd if=/dev/sda of=./safe.bin")["decision"] == "block"
 
 
 # =============================================================================
@@ -512,7 +531,7 @@ class TestSandboxAdvanced:
 
     def test_sandbox_timeout(self, workroot):
         sandbox = Sandbox(workroot)
-        result = sandbox.run("sleep 10", timeout_seconds=1)
+        result = sandbox.run("sleep 10", timeout_seconds=0.5)
         assert result["status"] == "timeout"
 
 

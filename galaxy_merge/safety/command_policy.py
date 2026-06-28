@@ -173,28 +173,31 @@ def _contains_rm_rf_system_path(command: str) -> bool:
     return False
 
 
+def _dd_target_targets_system(value: str) -> bool:
+    target = value
+    for sp in SYSTEM_PATHS:
+        if target == sp or target.startswith(sp + "/"):
+            return True
+    return False
+
+
 def _contains_destructive_dd(command: str) -> bool:
+    """Block ``dd`` whenever either ``of=`` or ``if=`` targets a system path.
+
+    Reading raw system devices is at minimum data exfiltration and at worst
+    destructive (writing the read data back over a system device), so the
+    check fires regardless of which side of the pipeline is the system path.
+    """
     parts = command.split()
     if not parts:
         return False
     if os.path.basename(parts[0]) not in ("dd",):
         return False
-    has_of = False
     for part in parts[1:]:
-        if part.startswith("of="):
-            target = part[3:]
-            for sp in SYSTEM_PATHS:
-                if target == sp or target.startswith(sp + "/"):
-                    return True
-            has_of = True
-    if has_of:
-        return False
-    for part in parts[1:]:
-        if part.startswith("if="):
-            target = part[3:]
-            for sp in SYSTEM_PATHS:
-                if target == sp or target.startswith(sp + "/"):
-                    return True
+        if part.startswith("of=") and _dd_target_targets_system(part[3:]):
+            return True
+        if part.startswith("if=") and _dd_target_targets_system(part[3:]):
+            return True
     return False
 
 
