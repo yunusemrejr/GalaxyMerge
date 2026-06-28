@@ -27,10 +27,39 @@ class EventLog:
     def replay(self) -> list[dict[str, Any]]:
         if not self.path.exists():
             return []
-        records = []
-        with open(self.path) as f:
-            for line in f:
-                line = line.strip()
-                if line:
-                    records.append(json.loads(line))
-        return records
+        lock_path = self.path.with_suffix(self.path.suffix + ".lock")
+        import fcntl, os
+        fd = None
+        try:
+            fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
+            fcntl.flock(fd, fcntl.LOCK_SH)
+            records = []
+            with open(self.path) as f:
+                for line in f:
+                    line = line.strip()
+                    if line:
+                        try:
+                            records.append(json.loads(line))
+                        except json.JSONDecodeError:
+                            pass
+            return records
+        finally:
+            if fd is not None:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except OSError:
+                    pass
+                try:
+                    os.close(fd)
+                except OSError:
+                    pass
+
+    def replay_from(self, offset: int = 0, limit: int | None = None) -> list[dict[str, Any]]:
+        records = self.replay()
+        if offset <= 0:
+            offset = 0
+        if limit is None:
+            return records[offset:]
+        if limit <= 0:
+            return []
+        return records[offset:offset + limit]

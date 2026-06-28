@@ -19,18 +19,39 @@ PROVIDER_ENV_VARS = [
 ]
 
 
+REPOSITORY_URL = "https://github.com/yunusemrejr/GalaxyMerge"
+
+
 def print_boot_log(
     version: str,
     workroot: Path,
     session_id: str,
     url: str,
     port: int,
+    provider_stats: dict | None = None,
 ) -> None:
     print(f"Galaxy Merge Harness v{version}", file=sys.stderr)
+    print(f"Repository: {REPOSITORY_URL}", file=sys.stderr)
     print(f"WorkRoot: {workroot}", file=sys.stderr)
     print(f"Session ID: {session_id}", file=sys.stderr)
     print(f"GUI: {url}", file=sys.stderr)
     print(f"Safety: enabled", file=sys.stderr)
+
+    if provider_stats:
+        loaded = provider_stats.get("loaded", 0)
+        available = provider_stats.get("available", 0)
+        unavailable = provider_stats.get("unavailable", 0)
+    else:
+        loaded = 0
+        available = 0
+        for var in PROVIDER_ENV_VARS:
+            if var != "GH_TOKEN":
+                loaded += 1
+                if os.environ.get(var, ""):
+                    available += 1
+        unavailable = loaded - available
+    print(f"Providers: {loaded} loaded, {available} available, {unavailable} unavailable", file=sys.stderr)
+    print(f"Browser: isolated profile ready", file=sys.stderr)
 
 
 def shutdown(session: Session) -> None:

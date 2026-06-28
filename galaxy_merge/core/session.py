@@ -6,6 +6,7 @@ from typing import Any
 
 from galaxy_merge.core.events import EventLog
 from galaxy_merge.core.locks import atomic_write
+from galaxy_merge.core.runtime_models import SessionState
 
 
 def _generate_id(prefix: str) -> str:
@@ -28,30 +29,56 @@ class Session:
 
         self.event_log = EventLog(self.events_path)
         self._state: dict[str, Any] = self._load_state()
+        if self._state.get("created_at"):
+            try:
+                self.created_at = datetime.fromisoformat(self._state["created_at"])
+            except (TypeError, ValueError):
+                pass
 
     def _load_state(self) -> dict[str, Any]:
         if self.state_path.exists():
-            return json.loads(self.state_path.read_text())
-        return {}
+            try:
+                return json.loads(self.state_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                return {
+                    "status": "recovering",
+                    "active": True,
+                    "goal": "",
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                    "error": "state_file_corrupted",
+                }
+        return {
+            "status": "running",
+            "active": True,
+            "goal": "",
+            "error": None,
+        }
 
     def save_state(self) -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         for sub in ["diffs", "artifacts"]:
             (self.session_dir / sub).mkdir(parents=True, exist_ok=True)
-        for fname in ["transcript.jsonl", "council.jsonl", "tool_calls.jsonl", "safety.jsonl"]:
+        for fname in [
+            "transcript.jsonl", "council.jsonl", "tool_calls.jsonl",
+            "safety.jsonl", "provider_events.jsonl", "compaction.jsonl",
+        ]:
             p = self.session_dir / fname
             if not p.exists():
                 p.touch()
-        state = {
-            "session_id": self.session_id,
-            "workroot": str(self.workroot),
-            "created_at": self.created_at.isoformat(),
-            "updated_at": datetime.now(timezone.utc).isoformat(),
-            "status": self._state.get("status", "running"),
-            "goal": self._state.get("goal", ""),
-            "active": self._state.get("active", True),
-        }
-        atomic_write(self.state_path, json.dumps(state, indent=2, default=str))
+
+        state = SessionState(
+            session_id=self.session_id,
+            workroot=str(self.workroot),
+            created_at=self.created_at,
+            updated_at=datetime.now(timezone.utc),
+            status=self._state.get("status", "running"),
+            goal=self._state.get("goal", ""),
+            active=self._state.get("active", True),
+            error=self._state.get("error"),
+            crash_count=self._state.get("crash_count", 0),
+        )
+        atomic_write(self.state_path, json.dumps(state.model_dump(mode="json"), indent=2, default=str))
 
     def set_goal(self, goal: str) -> None:
         self._state["goal"] = goal
@@ -66,15 +93,54 @@ class Session:
         self.goal_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.goal_path, json.dumps(goal_data, indent=2))
 
-    def mark_completed(self) -> None:
-        self._state["status"] = "complete"
+    def mark_running(self) -> None:
+        self._state["status"] = "running"
+        self._state["active"] = True
+        self._state["error"] = None
+        self.save_state()
+
+    def mark_stopped(self, reason: str = "stopped") -> None:
+        self._state["status"] = reason
         self._state["active"] = False
         self.save_state()
 
-    def mark_crashed(self) -> None:
+    def mark_completed(self) -> None:
+        self._state["status"] = "complete"
+        self._state["active"] = False
+        self._state["error"] = None
+        self._write_final_md("completed")
+        self.save_state()
+
+    def mark_crashed(self, reason: str | None = None) -> None:
         self._state["status"] = "crashed"
         self._state["active"] = False
+        self._state["error"] = reason
+        self._state["crash_count"] = self._state.get("crash_count", 0) + 1
         self.save_state()
+
+    def _write_final_md(self, reason: str) -> None:
+        """Write a final.md summary for the completed session."""
+        goal_text = self._state.get("goal", "")
+        lines = [
+            f"# Session {self.session_id}",
+            "",
+            f"**Status:** {reason}",
+            f"**Goal:** {goal_text}",
+            f"**WorkRoot:** {self.workroot}",
+            f"**Started:** {self.created_at.isoformat()}",
+            f"**Reason:** {reason}",
+            "",
+        ]
+        events_path = self.session_dir / "events.jsonl"
+        if events_path.exists():
+            try:
+                events = [json.loads(l) for l in events_path.read_text().splitlines() if l.strip()]
+            except (json.JSONDecodeError, OSError):
+                events = []
+            lines.append(f"**Events:** {len(events)} total")
+            for e in events:
+                lines.append(f"- {e.get('event', '?')}: {e.get('goal', e.get('tool', e.get('task_type', '')))}")
+        atomic_write(self.session_dir / "final.md", "\n".join(lines))
 
     def to_dict(self) -> dict[str, Any]:
         return {
@@ -83,7 +149,21 @@ class Session:
             "created_at": self.created_at.isoformat(),
             "status": self._state.get("status", "running"),
             "goal": self._state.get("goal", ""),
+            "active": self._state.get("active", True),
+            "error": self._state.get("error"),
         }
+
+    def resume(self) -> bool:
+        if self._state.get("status") in {"complete", "running"}:
+            return False
+        self._state["status"] = self._state.get("status", "recovering")
+        self._state["active"] = True
+        self._state["error"] = None
+        self.save_state()
+        return True
+
+    def can_resume(self) -> bool:
+        return self._state.get("status") in {"stopped", "crashed", "failed_safe", "recovering"}
 
 
 def detect_workroot(path: Path) -> Path | None:
@@ -164,6 +244,7 @@ def init_gm_dir(workroot: Path) -> None:
         "notes/.trash",
         "memory",
         "sessions",
+        "skill_matches",
         "indexes/embeddings",
         "cache/provider",
         "cache/file_summaries",
@@ -196,6 +277,7 @@ def init_gm_dir(workroot: Path) -> None:
     _init_web_files(gm)
     _init_browser_files(gm)
     _init_github_files(gm)
+    _validate_gm_structure(gm)
 
 
 def _init_readme(gm: Path) -> None:
@@ -330,3 +412,64 @@ def _init_github_files(gm: Path) -> None:
     p = gm / "github" / "repos.jsonl"
     if not p.exists():
         p.touch()
+
+
+REQUIRED_GM_SUBDIRS: list[str] = [
+    "notes", "notes/history", "notes/.trash",
+    "memory",
+    "sessions",
+    "indexes", "indexes/embeddings",
+    "cache/provider", "cache/file_summaries", "cache/skill_matches",
+    "cache/fusion", "cache/command_results",
+    "cache/web_search", "cache/browser_pages", "cache/github_scans",
+    "web",
+    "browser/profiles", "browser/sessions", "browser/screenshots",
+    "locations",
+    "github/scans", "github/issues", "github/pull_requests",
+    "logs",
+    "safety",
+    "git/patchsets",
+]
+
+REQUIRED_GM_FILES: list[str] = [
+    "project.json",
+    "README.md",
+    "notes/index.json",
+    "safety/policy.snapshot.json",
+    "safety/allowed_commands.json",
+    "safety/protected_paths.json",
+    "web/searches.jsonl",
+    "web/fetched_pages.jsonl",
+    "web/wikipedia.jsonl",
+    "web/duckduckgo.jsonl",
+    "web/curl_fetches.jsonl",
+    "browser/console_logs.jsonl",
+    "browser/network_logs.jsonl",
+    "browser/page_errors.jsonl",
+    "github/repos.jsonl",
+    "git/checkpoints.jsonl",
+]
+
+
+def _validate_gm_structure(gm: Path) -> list[str]:
+    """Check that all required .gm/ subdirs and files exist. Return warning list."""
+    import logging
+    warnings: list[str] = []
+
+    for sub in REQUIRED_GM_SUBDIRS:
+        p = gm / sub
+        if not p.is_dir():
+            warnings.append(f"missing .gm/ subdirectory: {sub}")
+
+    for fname in REQUIRED_GM_FILES:
+        p = gm / fname
+        if not p.exists():
+            warnings.append(f"missing .gm/ file: {fname}")
+        elif fname == "project.json":
+            _validate_project_json(p)
+
+    if warnings:
+        for w in warnings:
+            logging.warning(f"gm structure: {w}")
+
+    return warnings

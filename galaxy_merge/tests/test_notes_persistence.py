@@ -334,8 +334,7 @@ class TestNotesInject:
         t = await _tools(tmp_path / ".gm")
         await t["notes.create"]("injected-note", "THIS IS INJECTED")
         await t["notes.inject"]("injected-note")
-        from galaxy_merge.tools.notes_tools import clear_goal_injections
-        inject_list = get_injected_notes()
+        inject_list = get_injected_notes(tmp_path / ".gm")
         assert "injected-note" in inject_list
 
     @pytest.mark.asyncio
@@ -351,9 +350,9 @@ class TestNotesInject:
         t = await _tools(tmp_path / ".gm")
         await t["notes.create"]("test", "content")
         await t["notes.inject"]("test")
-        assert len(get_injected_notes()) >= 1
-        clear_goal_injections()
-        assert len(get_injected_notes()) == 0
+        assert len(get_injected_notes(tmp_path / ".gm")) >= 1
+        clear_goal_injections(tmp_path / ".gm")
+        assert len(get_injected_notes(tmp_path / ".gm")) == 0
 
 
 # =============================================================================
@@ -382,7 +381,7 @@ class TestNoteRoleTracking:
         retriever.record_note_usage("note.md", "reviewer")
         retriever.clear_for_new_goal()
         assert retriever.get_note_usage() == {}
-        assert len(get_injected_notes()) == 0
+        assert len(get_injected_notes(tmp_path / ".gm")) == 0
 
 
 # =============================================================================

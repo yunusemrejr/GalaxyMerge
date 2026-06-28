@@ -56,9 +56,15 @@ class TestLauncher:
     def test_launcher_opens_browser_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         opened = []
 
+        import pathlib
+
         class FakeServer:
-            def serve(self) -> None:
-                return None
+            def __init__(self):
+                self.config_dir = pathlib.Path(tmp_path / "config_templates")
+                self._socket = None
+
+            def serve(self):
+                pass
 
         def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
             return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}
@@ -74,9 +80,15 @@ class TestLauncher:
     def test_launcher_respects_no_browser(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         opened = []
 
+        import pathlib
+
         class FakeServer:
-            def serve(self) -> None:
-                return None
+            def __init__(self):
+                self.config_dir = pathlib.Path(tmp_path / "config_templates")
+                self._socket = None
+
+            def serve(self):
+                pass
 
         def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
             return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}

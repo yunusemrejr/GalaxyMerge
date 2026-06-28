@@ -22,17 +22,17 @@ def _get_index(notes_dir: Path) -> dict[str, Any]:
     return {"schema_version": 1, "notes": []}
 
 
-def _save_index(notes_dir: Path, index: dict[str, Any]) -> None:
+def _save_index(notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False) -> None:
     index_path = notes_dir / "index.json"
-    atomic_write(index_path, json.dumps(index, indent=2))
+    atomic_write(index_path, json.dumps(index, indent=2), _nested_lock=_nested_lock)
 
 
-def _save_note_version(notes_dir: Path, note_id: str, content: str) -> str:
+def _save_note_version(notes_dir: Path, note_id: str, content: str, *, _nested_lock: bool = False) -> str:
     history_dir = notes_dir / "history"
     history_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
     version_path = history_dir / f"{note_id}_{timestamp}.md"
-    atomic_write(version_path, content)
+    atomic_write(version_path, content, _nested_lock=_nested_lock)
     return version_path.name
 
 
@@ -41,19 +41,21 @@ def _notes_lock(notes_dir: Path) -> FileLock:
 
 
 _note_usage: dict[str, dict[str, Any]] = {}
-NOTES_INJECTED_FOR_GOAL: list[str] = []
+_injected_by_gm_dir: dict[str, list[str]] = {}
 
 
-def get_injected_notes() -> list[str]:
-    return list(NOTES_INJECTED_FOR_GOAL)
+def get_injected_notes(gm_dir: Path | None = None) -> list[str]:
+    key = str(gm_dir) if gm_dir else ""
+    return list(_injected_by_gm_dir.get(key, []))
 
 
 def get_note_usage() -> dict[str, dict[str, Any]]:
     return dict(_note_usage)
 
 
-def clear_goal_injections() -> None:
-    NOTES_INJECTED_FOR_GOAL.clear()
+def clear_goal_injections(gm_dir: Path | None = None) -> None:
+    key = str(gm_dir) if gm_dir else ""
+    _injected_by_gm_dir.pop(key, None)
 
 
 def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
@@ -65,7 +67,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
         with _notes_lock(notes_dir):
             if path.exists():
                 return ToolResult(success=False, error=f"note '{name}' already exists")
-            atomic_write(path, content)
+            atomic_write(path, content, _nested_lock=True)
 
             index = _get_index(notes_dir)
             note_id = f"note_{name}"
@@ -78,7 +80,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"note_id": note_id, "name": name, "created": True})
 
     async def notes_read(name: str | None = None) -> ToolResult:
@@ -103,14 +105,14 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
         with _notes_lock(notes_dir):
             if not path.exists():
                 return ToolResult(success=False, error=f"note '{name}' not found")
-            _save_note_version(notes_dir, name, path.read_text())
-            atomic_write(path, content)
+            _save_note_version(notes_dir, name, path.read_text(), _nested_lock=True)
+            atomic_write(path, content, _nested_lock=True)
 
             index = _get_index(notes_dir)
             for entry in index.get("notes", []):
                 if entry.get("path", "").startswith(name):
                     entry["updated_at"] = datetime.now(timezone.utc).isoformat()
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "updated": True})
 
     async def notes_rename(name: str, new_name: str) -> ToolResult:
@@ -129,7 +131,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                     entry["path"] = f"{new_name}.md"
                     entry["id"] = f"note_{new_name}"
                     entry["updated_at"] = datetime.now(timezone.utc).isoformat()
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"from": name, "to": new_name, "renamed": True})
 
     async def notes_delete(name: str) -> ToolResult:
@@ -140,13 +142,13 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
 
             trash_dir = notes_dir / ".trash"
             trash_dir.mkdir(parents=True, exist_ok=True)
-            _save_note_version(notes_dir, name, path.read_text())
+            _save_note_version(notes_dir, name, path.read_text(), _nested_lock=True)
             path.rename(trash_dir / f"{name}.md")
 
             index = _get_index(notes_dir)
             target_path = f"{name}.md"
             index["notes"] = [n for n in index.get("notes", []) if n.get("path") != target_path]
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "deleted": True, "trashed": True})
 
     async def notes_restore(name: str) -> ToolResult:
@@ -172,7 +174,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                 "created_at": datetime.now(timezone.utc).isoformat(),
                 "updated_at": datetime.now(timezone.utc).isoformat(),
             })
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "restored": True})
 
     async def notes_tag(name: str, tags: list[str]) -> ToolResult:
@@ -183,7 +185,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                     existing = set(entry.get("tags", []))
                     existing.update(tags)
                     entry["tags"] = list(existing)
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "tags": tags})
 
     async def notes_pin(name: str, pinned: bool = True) -> ToolResult:
@@ -192,7 +194,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
             for entry in index.get("notes", []):
                 if entry.get("path", "").startswith(name):
                     entry["pinned"] = pinned
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "pinned": pinned})
 
     async def notes_list_indexed() -> ToolResult:
@@ -260,7 +262,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
         if not path.exists():
             return ToolResult(success=False, error=f"note '{name}' not found")
         content = path.read_text()
-        NOTES_INJECTED_FOR_GOAL.append(name)
+        _injected_by_gm_dir.setdefault(str(notes_dir.parent), []).append(name)
         return ToolResult(success=True, data={"name": name, "injected": True, "content": content[:500]})
 
     async def notes_write(name: str, content: str, title: str | None = None) -> ToolResult:
@@ -269,8 +271,8 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
         with _notes_lock(notes_dir):
             existed = path.exists()
             if existed:
-                _save_note_version(notes_dir, name, path.read_text())
-            atomic_write(path, content)
+                _save_note_version(notes_dir, name, path.read_text(), _nested_lock=True)
+            atomic_write(path, content, _nested_lock=True)
 
             index = _get_index(notes_dir)
             note_id = f"note_{name}"
@@ -292,7 +294,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                     "created_at": datetime.now(timezone.utc).isoformat(),
                     "updated_at": datetime.now(timezone.utc).isoformat(),
                 })
-            _save_index(notes_dir, index)
+            _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "written": True, "created": not existed})
 
     return [

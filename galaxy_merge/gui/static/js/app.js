@@ -16,6 +16,8 @@
     BrowserPanel.refresh();
     LocationsPanel.refresh();
     refreshCouncilStatus();
+    LogsPanel.refreshFromServer();
+    VerifyPanel.refresh();
 
     if (GM.project && GM.project.readonly_mode) {
       addChat('system', 'READ-ONLY MODE: Operating inside Galaxy Merge codebase. Mutations disabled.');
@@ -38,6 +40,14 @@
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
     });
 
+    document.querySelectorAll('.center-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchCenterTab(btn.dataset.centerTab));
+    });
+
+    document.querySelectorAll('.sub-tab-btn').forEach(btn => {
+      btn.addEventListener('click', () => switchSubTab(btn.closest('.tab-content'), btn.dataset.subTab));
+    });
+
     refreshAll();
   }
 
@@ -50,11 +60,15 @@
     }
   }
 
+  let wsReconnectDelay = 1000;
+  const wsMaxReconnectDelay = 30000;
+
   function connectWebSocket(url) {
     try {
       GM.ws = new WebSocket(url);
       document.getElementById('bar-safety').textContent = 'Backend: connecting';
       GM.ws.onopen = () => {
+        wsReconnectDelay = 1000;
         document.getElementById('bar-safety').textContent = GM.project && GM.project.readonly_mode ? 'Safety: read-only' : 'Safety: enabled';
       };
       GM.ws.onmessage = (event) => {
@@ -67,7 +81,8 @@
       };
       GM.ws.onclose = () => {
         document.getElementById('bar-safety').textContent = 'Backend: reconnecting';
-        setTimeout(() => connectWebSocket(url), 3000);
+        setTimeout(() => connectWebSocket(url), wsReconnectDelay);
+        wsReconnectDelay = Math.min(wsReconnectDelay * 2, wsMaxReconnectDelay);
       };
       GM.ws.onerror = () => {
         document.getElementById('bar-safety').textContent = 'Backend: degraded';
@@ -82,6 +97,8 @@
 
     if (type === 'goal_set' || type === 'goal_received') {
       GoalPanel.render(null, data.status || 'understanding', '');
+      const state = GoalPanel.getState();
+      state.goal = data.goal || '';
       addChat('system', `Goal accepted: ${data.goal}`);
     }
     if (type === 'goal_result') {
@@ -98,6 +115,10 @@
         if (result.fusion && result.fusion.summary) {
           addChat('system', result.fusion.summary);
         }
+        if (result.plan) {
+          PlanPanel.render(result.plan);
+        }
+        VerifyPanel.refresh();
       }
     }
     if (type === 'log') {
@@ -105,20 +126,60 @@
     }
     if (type === 'tool_event' || type === 'tool_call_started' || type === 'tool_call_completed') {
       LogsPanel.add(`[tool] ${data.tool} — ${data.status || 'started'}`, data.status === 'blocked' ? 'error' : '');
+      ToolsPanel.addToolCall(data);
+      GoalPanel.addToolCall();
+    }
+    if (type === 'tool_call_blocked') {
+      LogsPanel.add(`[safety] blocked: ${data.tool} — ${data.reason || ''}`, 'error');
+      GoalPanel.setBlocked(true, data.reason || 'blocked by safety');
+      SafetyPanel.refresh();
     }
     if (type === 'council_event' || type === 'council_completed') {
       const roles = data.roles || [];
       LogsPanel.add(`[council] completed: ${roles.length ? roles.join(', ') : 'no roles completed'}`, roles.length ? '' : 'warn');
+      CouncilPanel.refresh();
     }
-    if (type === 'safety_event' || data.event === 'tool_call_blocked') {
-      LogsPanel.add(`[safety] blocked: ${data.tool || data.target} — ${data.reason || ''}`, 'error');
-      SafetyPanel.refresh();
+    if (type === 'provider_called') {
+      LogsPanel.add(`[provider] ${data.provider_id} called for ${data.role}`, '');
+    }
+    if (type === 'provider_failed') {
+      LogsPanel.add(`[provider] ${data.provider_id} failed: ${data.error}`, 'error');
+      GoalPanel.setDegraded(true, `provider ${data.provider_id} failed`);
+      CouncilPanel.refresh();
+    }
+    if (type === 'role_fallback') {
+      LogsPanel.add(`[council] fallback: ${data.role} ${data.from_provider} → ${data.to_provider}`, 'warn');
+      GoalPanel.setDegraded(true, `fallback: ${data.role}`);
+      CouncilPanel.refresh();
+    }
+    if (type === 'compaction_started') {
+      LogsPanel.add(`[compaction] started: ${data.reason || 'context limit'}`, 'warn');
+      GoalPanel.addCompaction();
+    }
+    if (type === 'compaction_completed') {
+      LogsPanel.add(`[compaction] completed: ${data.context_before_tokens} → ${data.context_after_tokens} tokens`, '');
+    }
+    if (type === 'verification_started') {
+      addChat('system', 'Verification started...');
+    }
+    if (type === 'verification_completed') {
+      GoalPanel.setVerification(data.passed);
+      if (data.passed) {
+        addChat('system', '✓ Verification passed');
+      } else {
+        addChat('error', '✗ Verification failed');
+      }
+      VerifyPanel.refresh();
     }
     if (type === 'completion_accepted') {
       addChat('system', '✓ Task verified and accepted');
+      GoalPanel.setVerification(true);
+      VerifyPanel.refresh();
     }
     if (type === 'completion_rejected') {
       addChat('system', '✗ Task rejected by reviewer');
+      GoalPanel.setVerification(false);
+      VerifyPanel.refresh();
     }
     if (type === 'session_stopped') {
       addChat('system', 'Session stopped');
@@ -144,7 +205,7 @@
   }
 
   function addChat(type, text) {
-    const container = document.getElementById('chat-stream');
+    const container = document.getElementById('stream-panel');
     const entry = document.createElement('div');
     entry.className = `chat-entry ${type}`;
     const prefix = type === 'user' ? '>' : type === 'error' ? '!' : '#';
@@ -153,7 +214,7 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  async function refreshCouncilStatus() {
+  async   async function refreshCouncilStatus() {
     try {
       const data = await API.getCouncil();
       const providers = data.providers || [];
@@ -166,7 +227,7 @@
       }
       ToolsPanel.render(data.tools || []);
       if (window.CouncilPanel) {
-        CouncilPanel.render(data.roles || []);
+        CouncilPanel.refresh();
       }
     } catch (e) {
       document.getElementById('bar-providers').textContent = 'Providers: unavailable';
@@ -182,6 +243,25 @@
     if (panel) panel.classList.add('active');
   }
 
+  function switchCenterTab(tabId) {
+    document.querySelectorAll('.center-tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.center-tab-content').forEach(c => c.classList.remove('active'));
+    const btn = document.querySelector(`.center-tab-btn[data-center-tab="${tabId}"]`);
+    if (btn) btn.classList.add('active');
+    const panel = document.getElementById(`${tabId}-panel`);
+    if (panel) panel.classList.add('active');
+  }
+
+  function switchSubTab(parent, subTabId) {
+    if (!parent) return;
+    parent.querySelectorAll('.sub-tab-btn').forEach(b => b.classList.remove('active'));
+    parent.querySelectorAll('.sub-tab-content').forEach(c => c.classList.remove('active'));
+    const btn = parent.querySelector(`.sub-tab-btn[data-sub-tab="${subTabId}"]`);
+    if (btn) btn.classList.add('active');
+    const panel = document.getElementById(subTabId);
+    if (panel) panel.classList.add('active');
+  }
+
   function escapeHtml(text) {
     const d = document.createElement('div');
     d.textContent = text;
@@ -193,6 +273,7 @@
       FilesPanel.refresh();
       SafetyPanel.refresh();
       refreshCouncilStatus();
+      LogsPanel.refreshFromServer();
     }, 10000);
   }
 

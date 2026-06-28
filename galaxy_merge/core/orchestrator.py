@@ -203,6 +203,25 @@ class Orchestrator:
                 loc = self.location_classifier.classify(params.get("path", tool_name), "path")
                 if loc["classification"] in ("galaxy_merge_app_codebase",):
                     continue
+
+                # ── Hash-based conflict detection ────────────────────
+                # Before writing/patching a file, inject the current
+                # content hash as expected_hash so that concurrent-session
+                # modification is detected and reported.
+                if tool_name in ("file.write", "file.patch"):
+                    path = params.get("path", "")
+                    if path and "expected_hash" not in params:
+                        target = (self.session.workroot / path).resolve()
+                        try:
+                            import hashlib
+                            if target.exists():
+                                current = hashlib.sha256(target.read_bytes()).hexdigest()[:16]
+                            else:
+                                current = ""
+                            params = {**params, "expected_hash": current}
+                        except (OSError, ValueError):
+                            pass
+
                 self.event_log.emit("tool_call_started", session_id=self.session.session_id, tool=tool_name)
                 result = await self.tool_kernel.execute(tool_name, params, self.session.session_id)
                 self.event_log.emit(

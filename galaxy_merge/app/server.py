@@ -1,11 +1,14 @@
 import asyncio
 import json
+from datetime import datetime, timezone
 import threading
 from pathlib import Path
 from typing import Any
+from base64 import b64encode
+import time
 
 import uvicorn
-from fastapi import FastAPI, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
@@ -17,6 +20,7 @@ from galaxy_merge.github.scanner import GitHubScanner
 from galaxy_merge.locations.classifier import LocationClassifier
 from galaxy_merge.locations.registry import LocationRegistry
 from galaxy_merge.safety.credential_policy import CredentialPolicy
+from galaxy_merge.core.concurrency import read_active_port_map
 from galaxy_merge.core.locks import FileLock, atomic_write
 from galaxy_merge.safety.path_utils import is_relative_to, resolve_inside
 from galaxy_merge.browser.manager import BrowserManager
@@ -73,6 +77,15 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
     safe_offset = max(0, offset)
     if not notes_dir.exists():
         return {"notes": [], "total": 0, "offset": safe_offset, "limit": safe_limit, "truncated": False}
+    index = {}
+    index_path = notes_dir / "index.json"
+    if index_path.exists():
+        try:
+            index_data = json.loads(index_path.read_text())
+            for item in index_data.get("notes", []):
+                index[item.get("path", "").replace(".md", "")] = item
+        except (json.JSONDecodeError, OSError):
+            index = {}
     files = [
         f for f in sorted(notes_dir.iterdir())
         if f.suffix in (".md", ".txt", ".json") and f.name != "index.json"
@@ -81,11 +94,18 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
     legacy_notes = {}
     for f in files[safe_offset:safe_offset + safe_limit]:
         content = f.read_text()
+        meta = index.get(f.stem, {})
         entries.append({
             "name": f.stem,
             "path": f.name,
             "content": content,
             "preview": content[:200],
+            "id": meta.get("id", f"note_{f.stem}"),
+            "title": meta.get("title", f.stem),
+            "tags": meta.get("tags", []),
+            "pinned": bool(meta.get("pinned", False)),
+            "created_at": meta.get("created_at", ""),
+            "updated_at": meta.get("updated_at", ""),
         })
         legacy_notes[f.stem] = content
     return {
@@ -96,6 +116,129 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
         "limit": safe_limit,
         "truncated": safe_offset + len(entries) < len(files),
     }
+
+
+def _read_json_file(path: Path, fallback: Any) -> Any:
+    if not path.exists():
+        return fallback
+    try:
+        return json.loads(path.read_text())
+    except (json.JSONDecodeError, OSError):
+        return fallback
+
+
+def _load_notes_index(notes_dir: Path) -> dict[str, Any]:
+    index_path = notes_dir / "index.json"
+    payload = _read_json_file(index_path, {"schema_version": 1, "notes": []})
+    if not isinstance(payload, dict):
+        return {"schema_version": 1, "notes": []}
+    payload.setdefault("schema_version", 1)
+    notes = payload.get("notes", [])
+    if not isinstance(notes, list):
+        payload["notes"] = []
+    return payload
+
+
+def _save_notes_index(notes_dir: Path, index: dict[str, Any]) -> None:
+    index_path = notes_dir / "index.json"
+    atomic_write(index_path, json.dumps(index, indent=2), _nested_lock=True)
+
+
+def _upsert_note_index(notes_dir: Path, note_name: str, path: str, *, created_at: str | None = None, tags: list[str] | None = None, pinned: bool = False, title: str | None = None, updated_at: str | None = None) -> None:
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    index = _load_notes_index(notes_dir)
+    entries = index.setdefault("notes", [])
+    normalized_path = path.strip()
+    target = None
+    for item in entries:
+        if item.get("path") == normalized_path:
+            target = item
+            break
+    if target is None:
+        target = {
+            "id": f"note_{note_name}",
+            "path": normalized_path,
+            "title": title or note_name,
+            "created_at": created_at or datetime.now(timezone.utc).isoformat(),
+            "updated_at": updated_at or datetime.now(timezone.utc).isoformat(),
+            "tags": sorted(set(tags or [])),
+            "pinned": pinned,
+        }
+        entries.append(target)
+    else:
+        if title is not None:
+            target["title"] = title
+        if created_at is not None:
+            target["created_at"] = created_at
+        target["updated_at"] = updated_at or datetime.now(timezone.utc).isoformat()
+        if tags is not None:
+            target["tags"] = sorted(set(tags))
+        if pinned:
+            target["pinned"] = pinned
+        elif pinned is False:
+            target["pinned"] = False
+    _save_notes_index(notes_dir, index)
+
+
+def _remove_note_from_index(notes_dir: Path, note_name: str) -> None:
+    notes_dir.mkdir(parents=True, exist_ok=True)
+    index = _load_notes_index(notes_dir)
+    notes = index.get("notes", [])
+    if not isinstance(notes, list):
+        return
+    target_name = f"{note_name}.md"
+    index["notes"] = [item for item in notes if item.get("path") != target_name]
+    _save_notes_index(notes_dir, index)
+
+
+def _read_active_sessions(gm_dir: Path, current_session_id: str) -> list[dict[str, Any]]:
+    ports = read_active_port_map(gm_dir)
+    now = time.time()
+    hb_dir = gm_dir / "sessions" / "heartbeats"
+    sessions: list[dict[str, Any]] = []
+    seen: set[str] = set()
+    for session_id, record in sorted(ports.items()):
+        seen.add(session_id)
+        state_path = gm_dir / "sessions" / session_id / "state.json"
+        state = _read_json_file(state_path, {})
+        hb = hb_dir / f"{session_id}.hb"
+        hb_age = now - hb.stat().st_mtime if hb.exists() else None
+        active = hb_age is not None and hb_age < 300
+        sessions.append({
+            "session_id": session_id,
+            "port": record.get("port"),
+            "pid": record.get("pid"),
+            "workroot": state.get("workroot", gm_dir.parent.as_posix()),
+            "status": state.get("status", "unknown"),
+            "goal": state.get("goal", ""),
+            "active": bool(active),
+            "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
+            "error": state.get("error"),
+            "goal_state": state.get("status", "unknown"),
+            "last_heartbeat": record.get("updated_at"),
+        })
+
+    if current_session_id not in seen:
+        current_state = _read_json_file(gm_dir / "sessions" / current_session_id / "state.json", {})
+        hb = hb_dir / f"{current_session_id}.hb"
+        hb_age = now - hb.stat().st_mtime if hb.exists() else None
+        current_record = ports.get(current_session_id, {})
+        sessions.append({
+            "session_id": current_session_id,
+            "port": current_record.get("port"),
+            "pid": current_record.get("pid"),
+            "workroot": current_state.get("workroot", gm_dir.parent.as_posix()),
+            "status": current_state.get("status", "unknown"),
+            "goal": current_state.get("goal", ""),
+            "active": hb_age is not None and hb_age < 300,
+            "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
+            "error": current_state.get("error"),
+            "goal_state": current_state.get("status", "unknown"),
+            "last_heartbeat": hb.stat().st_mtime if hb.exists() else None,
+        })
+
+    sessions.sort(key=lambda item: (not item["active"], item["session_id"]))
+    return sessions
 
 
 def _redact_nested(value: Any, policy: CredentialPolicy) -> Any:
@@ -192,16 +335,10 @@ def build_council_event_summary(events: list[dict[str, Any]], workroot: Path, li
 
 
 class SessionServer:
-    def __init__(self, session: Session, port: int = 0, strict_socket: bool = False):
+    def __init__(self, session: Session, port: int = 0):
         self.session = session
-        self._socket = None
-        try:
-            self._socket = reserve_socket(port)
-            self.port = self._socket.getsockname()[1]
-        except OSError:
-            if strict_socket:
-                raise
-            self.port = port
+        self._socket = reserve_socket(port)
+        self.port = self._socket.getsockname()[1]
         self.config_dir = session.gm_dir.parent / "config_templates"
         if not self.config_dir.exists():
             self.config_dir = Path(__file__).resolve().parent.parent / "config_templates"
@@ -210,6 +347,7 @@ class SessionServer:
         self._ws_clients: list[WebSocket] = []
         self._server: uvicorn.Server | None = None
         self._orchestrator: Orchestrator | None = None
+        self._goal_task: asyncio.Task | None = None
         self._browser_manager = BrowserManager(session.gm_dir)
 
     def _check_launch_inside_codebase(self) -> bool:
@@ -223,6 +361,13 @@ class SessionServer:
             pass
         return False
 
+    def _browser_session_id(self, label: str = "gui") -> str:
+        if label in ("gui", ""):
+            return f"{self.session.session_id}:gui"
+        if label.startswith(f"{self.session.session_id}:"):
+            return label
+        return f"{self.session.session_id}:{label}"
+
     def _build_app(self) -> FastAPI:
         app = FastAPI(title="Galaxy Merge Harness")
 
@@ -230,6 +375,7 @@ class SessionServer:
         def get_session():
             data = self.session.to_dict()
             data["readonly_mode"] = self._is_readonly
+            data["goal_state"] = data.get("status", "idle")
             return data
 
         @app.get("/api/project")
@@ -241,6 +387,14 @@ class SessionServer:
                 data["readonly_mode"] = self._is_readonly
                 return data
             return {"workroot": str(self.session.workroot), "readonly_mode": self._is_readonly}
+
+        @app.get("/api/sessions")
+        def get_active_sessions():
+            sessions = _read_active_sessions(self.session.gm_dir, self.session.session_id)
+            return {
+                "sessions": sessions,
+                "current_session_id": self.session.session_id,
+            }
 
         @app.get("/api/tree")
         def get_tree(path: str = "", max_entries: int = 500):
@@ -274,6 +428,8 @@ class SessionServer:
                 return JSONResponse(content={"error": "goal is required"}, status_code=400)
             if self._is_readonly:
                 return JSONResponse(content={"error": "read-only mode: cannot execute goals on Galaxy Merge codebase"}, status_code=403)
+            if self._goal_task and not self._goal_task.done():
+                return JSONResponse(content={"error": "goal already in progress"}, status_code=409)
 
             self.session.set_goal(goal)
             self.session.event_log.emit("goal_received", session_id=self.session.session_id, goal=goal)
@@ -282,22 +438,62 @@ class SessionServer:
             if self._orchestrator is None:
                 self._orchestrator = Orchestrator(self.session, self.config_dir, APP_INSTALL_DIR)
 
-            asyncio.create_task(self._execute_goal_and_broadcast(goal))
+            self._goal_task = asyncio.create_task(self._execute_goal_and_broadcast(goal))
             return {"status": "accepted", "goal": goal}
 
         @app.post("/api/stop")
         async def stop_session():
-            self.session.mark_completed()
+            if self._goal_task and not self._goal_task.done():
+                self._goal_task.cancel()
+            self.session.mark_stopped("stopped")
+            self.session.event_log.emit("session_stopped", session_id=self.session.session_id)
             await self._broadcast({"type": "session_stopped"})
             return {"status": "stopped"}
 
         @app.post("/api/resume")
         async def resume_session():
-            return {"status": "resumed", "session_id": self.session.session_id}
+            if not self.session.can_resume():
+                return JSONResponse(content={"error": "session cannot be resumed"}, status_code=409)
+            if not self.session.resume():
+                return JSONResponse(content={"error": "session resume blocked"}, status_code=409)
+            self.session.mark_running()
+            self.session.event_log.emit(
+                "session_resumed",
+                session_id=self.session.session_id,
+                goal=self.session._state.get("goal", ""),
+            )
+            await self._broadcast({"type": "session_resumed"})
+            return {
+                "status": "resumed",
+                "session_id": self.session.session_id,
+                "goal": self.session._state.get("goal", ""),
+            }
 
         @app.get("/api/events")
-        def get_events():
-            return self.session.event_log.replay()
+        def get_events(
+            request: Request,
+            limit: int = 500,
+            offset: int = 0,
+            since: int | None = None,
+            redact: bool = True,
+        ):
+            events, total, next_offset = self._events_payload(
+                limit=limit,
+                offset=offset,
+                since=since,
+                redact=redact,
+            )
+            if request.url.query:
+                return {
+                    "events": events,
+                    "offset": offset,
+                    "since": since,
+                    "limit": limit,
+                    "next_offset": next_offset,
+                    "total": total,
+                    "truncated": next_offset < total,
+                }
+            return events
 
         @app.get("/api/logs")
         def get_logs(limit: int = 500, offset: int = 0):
@@ -329,12 +525,18 @@ class SessionServer:
 
         @app.get("/api/notes")
         def get_notes(limit: int = 100, offset: int = 0):
-            return build_notes_payload(self.session.gm_dir / "notes", limit, offset)
+            note_usage = {}
+            if self._orchestrator and self._orchestrator.memory_retriever:
+                note_usage = self._orchestrator.memory_retriever.get_note_usage()
+            data = build_notes_payload(self.session.gm_dir / "notes", limit, offset)
+            data["usage"] = note_usage
+            return data
 
         @app.post("/api/notes")
         async def create_note(data: dict[str, Any]):
             name = data.get("name", "")
             content = data.get("content", "")
+            tags = data.get("tags", [])
             if not name:
                 return JSONResponse(content={"error": "name required"}, status_code=400)
             notes_dir = self.session.gm_dir / "notes"
@@ -343,7 +545,16 @@ class SessionServer:
             with FileLock(notes_dir / ".notes.lock", timeout=10.0):
                 if path.exists():
                     return JSONResponse(content={"error": "note exists"}, status_code=409)
-                atomic_write(path, content)
+                now = datetime.now(timezone.utc).isoformat()
+                atomic_write(path, content, _nested_lock=True)
+                _upsert_note_index(
+                    notes_dir,
+                    note_name=name,
+                    path=f"{name}.md",
+                    created_at=now,
+                    updated_at=now,
+                    tags=tags if isinstance(tags, list) else [],
+                )
             return {"status": "created", "name": name}
 
         @app.patch("/api/notes/{note_id}")
@@ -357,9 +568,124 @@ class SessionServer:
                 if content:
                     history_dir = notes_dir / "history"
                     history_dir.mkdir(parents=True, exist_ok=True)
-                    atomic_write(history_dir / f"{note_id}_{int(__import__('time').time() * 1000)}.md", path.read_text())
-                    atomic_write(path, content)
+                    atomic_write(history_dir / f"{note_id}_{int(time.time() * 1000)}.md", path.read_text(), _nested_lock=True)
+                    atomic_write(path, content, _nested_lock=True)
+                    index = _load_notes_index(notes_dir)
+                    for item in index.get("notes", []):
+                        if item.get("path") == f"{note_id}.md":
+                            item["updated_at"] = datetime.now(timezone.utc).isoformat()
+                    _save_notes_index(notes_dir, index)
             return {"status": "updated", "name": note_id}
+
+        @app.patch("/api/notes/{note_id}/rename")
+        async def rename_note(note_id: str, data: dict[str, Any]):
+            notes_dir = self.session.gm_dir / "notes"
+            new_name = str(data.get("new_name", "")).strip()
+            if not new_name:
+                return JSONResponse(content={"error": "new_name required"}, status_code=400)
+            old_path = notes_dir / f"{note_id}.md"
+            new_path = notes_dir / f"{new_name}.md"
+            index_path = notes_dir / "index.json"
+            with FileLock(notes_dir / ".notes.lock", timeout=10.0):
+                if not old_path.exists():
+                    return JSONResponse(content={"error": "not found"}, status_code=404)
+                if new_path.exists():
+                    return JSONResponse(content={"error": "target already exists"}, status_code=409)
+                old_path.rename(new_path)
+                index = _read_json_file(index_path, {"schema_version": 1, "notes": []})
+                updated = False
+                for item in index.get("notes", []):
+                    if item.get("path") == old_path.name:
+                        item["path"] = new_path.name
+                        item["id"] = f"note_{new_name}"
+                        item["title"] = item.get("title", new_name)
+                        item["updated_at"] = datetime.now(timezone.utc).isoformat()
+                        updated = True
+                        break
+                if not updated:
+                    index.setdefault("notes", []).append({
+                        "id": f"note_{new_name}",
+                        "path": new_path.name,
+                        "title": new_name,
+                        "tags": [],
+                        "pinned": False,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    })
+                _save_data = json.dumps(index, indent=2)
+                atomic_write(index_path, _save_data)
+            return {"status": "renamed", "from": note_id, "to": new_name}
+
+        @app.patch("/api/notes/{note_id}/tag")
+        async def tag_note(note_id: str, data: dict[str, Any]):
+            notes_dir = self.session.gm_dir / "notes"
+            tags = data.get("tags", [])
+            if not isinstance(tags, list):
+                return JSONResponse(content={"error": "tags must be a list"}, status_code=400)
+            normalized = []
+            for tag in tags:
+                tag_value = str(tag).strip()
+                if tag_value:
+                    normalized.append(tag_value)
+            index_path = notes_dir / "index.json"
+            with FileLock(notes_dir / ".notes.lock", timeout=10.0):
+                path = notes_dir / f"{note_id}.md"
+                if not path.exists():
+                    return JSONResponse(content={"error": "not found"}, status_code=404)
+                index = _read_json_file(index_path, {"schema_version": 1, "notes": []})
+                target = None
+                for item in index.get("notes", []):
+                    if item.get("path") == path.name:
+                        target = item
+                        break
+                if target is None:
+                    target = {
+                        "id": f"note_{note_id}",
+                        "path": path.name,
+                        "title": note_id,
+                        "tags": [],
+                        "pinned": False,
+                        "created_at": "",
+                        "updated_at": "",
+                    }
+                    index.setdefault("notes", []).append(target)
+                target["tags"] = sorted(set(normalized))
+                target["updated_at"] = datetime.now(timezone.utc).isoformat()
+                _save_data = json.dumps(index, indent=2)
+                atomic_write(index_path, _save_data)
+            return {"status": "tagged", "name": note_id, "tags": normalized}
+
+        @app.patch("/api/notes/{note_id}/pin")
+        async def pin_note(note_id: str, data: dict[str, Any]):
+            notes_dir = self.session.gm_dir / "notes"
+            pinned = bool(data.get("pinned", True))
+            index_path = notes_dir / "index.json"
+            with FileLock(notes_dir / ".notes.lock", timeout=10.0):
+                path = notes_dir / f"{note_id}.md"
+                if not path.exists():
+                    return JSONResponse(content={"error": "not found"}, status_code=404)
+                index = _read_json_file(index_path, {"schema_version": 1, "notes": []})
+                target = None
+                for item in index.get("notes", []):
+                    if item.get("path") == path.name:
+                        target = item
+                        break
+                if target is None:
+                    target = {
+                        "id": f"note_{note_id}",
+                        "path": path.name,
+                        "title": note_id,
+                        "tags": [],
+                        "pinned": pinned,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    index.setdefault("notes", []).append(target)
+                target["pinned"] = pinned
+                target["updated_at"] = datetime.now(timezone.utc).isoformat()
+                _save_data = json.dumps(index, indent=2)
+                atomic_write(index_path, _save_data)
+            return {"status": "pinned", "name": note_id, "pinned": pinned}
 
         @app.delete("/api/notes/{note_id}")
         async def delete_note(note_id: str):
@@ -371,6 +697,7 @@ class SessionServer:
                 trash_dir = notes_dir / ".trash"
                 trash_dir.mkdir(parents=True, exist_ok=True)
                 path.rename(trash_dir / f"{note_id}.md")
+                _remove_note_from_index(notes_dir, note_id)
             return {"status": "deleted", "name": note_id}
 
         @app.post("/api/notes/{note_id}/restore")
@@ -384,6 +711,7 @@ class SessionServer:
                 if target.exists():
                     return JSONResponse(content={"error": "note exists"}, status_code=409)
                 trash_path.rename(target)
+                _upsert_note_index(notes_dir, note_id, f"{note_id}.md")
             return {"status": "restored", "name": note_id}
 
         @app.get("/api/notes/search")
@@ -404,18 +732,18 @@ class SessionServer:
 
         @app.post("/api/notes/{note_id}/inject")
         async def inject_note(note_id: str):
-            from galaxy_merge.tools.notes_tools import NOTES_INJECTED_FOR_GOAL
+            from galaxy_merge.tools.notes_tools import _injected_by_gm_dir
             notes_dir = self.session.gm_dir / "notes"
             path = notes_dir / f"{note_id}.md"
             if not path.exists():
                 return JSONResponse(content={"error": "not found"}, status_code=404)
-            NOTES_INJECTED_FOR_GOAL.append(note_id)
+            _injected_by_gm_dir.setdefault(str(self.session.gm_dir), []).append(note_id)
             return {"status": "injected", "name": note_id}
 
         @app.get("/api/notes/injected")
         async def get_injected_notes():
             from galaxy_merge.tools.notes_tools import get_injected_notes
-            return {"injected": get_injected_notes()}
+            return {"injected": get_injected_notes(self.session.gm_dir)}
 
         @app.get("/api/notes/history")
         async def list_note_history(name: str):
@@ -428,6 +756,16 @@ class SessionServer:
             for v in versions:
                 result.append({"version": v.name})
             return {"name": name, "versions": result}
+
+        @app.get("/api/notes/trash")
+        async def list_trashed_notes():
+            notes_dir = self.session.gm_dir / "notes"
+            trash_dir = notes_dir / ".trash"
+            if not trash_dir.exists():
+                return {"notes": []}
+            files = [f for f in sorted(trash_dir.iterdir()) if f.suffix in (".md", ".txt", ".json")]
+            notes = [{"name": f.stem, "path": f.name} for f in files]
+            return {"notes": notes}
 
         @app.get("/api/notes/usage")
         async def get_note_usage():
@@ -480,6 +818,27 @@ class SessionServer:
             collector = NetworkLogCollector(self.session.gm_dir, f"{self.session.session_id}:gui")
             return {"logs": collector.get_logs()}
 
+        @app.get("/api/browser/errors")
+        def browser_errors():
+            from galaxy_merge.browser.page_errors import PageErrorCollector
+            collector = PageErrorCollector(self.session.gm_dir, f"{self.session.session_id}:gui")
+            return {"errors": collector.get_errors()}
+
+        @app.get("/api/browser/screenshot")
+        def browser_screenshot(session_id: str = "gui"):
+            target = self._browser_session_id(session_id)
+            result = self._browser_manager.screenshot(target)
+            if not result.get("success"):
+                return result
+            screenshot_path = result.get("screenshot_path", "")
+            if screenshot_path:
+                path = Path(screenshot_path)
+                if path.exists():
+                    result["screenshot_file"] = path.name
+                    with path.open("rb") as fp:
+                        result["image_data"] = b64encode(fp.read()).decode("ascii")
+            return result
+
         @app.get("/api/github/scan")
         async def github_scan(url: str):
             import os
@@ -492,30 +851,84 @@ class SessionServer:
         def get_locations():
             return build_locations_payload(self.session.workroot, self.session.gm_dir, APP_INSTALL_DIR)
 
+        @app.get("/api/memory")
+        async def get_memory(kind: str = "all"):
+            from galaxy_merge.memory.store import MemoryStore
+            store = MemoryStore(self.session.gm_dir / "memory")
+            if kind == "all":
+                kinds = ["facts", "failures", "fixes", "lessons"]
+                result = {}
+                for k in kinds:
+                    records = store.read_recent(k, 20)
+                    result[k] = records
+                return {"memory": result}
+            else:
+                records = store.read_recent(kind, 20)
+                return {"kind": kind, "records": records}
+
+        @app.get("/api/skills")
+        async def get_skills():
+            from galaxy_merge.skills.registry import SkillRegistry
+            registry = SkillRegistry(self.session.gm_dir)
+            return {"skills": registry.list_all(), "count": registry.count()}
+
         @app.get("/api/safety")
         def get_safety():
             import galaxy_merge.safety.governor as gov
             from galaxy_merge.safety.command_policy import BLOCKED_COMMANDS
+            blocked_actions = []
+            if self._orchestrator and self._orchestrator.safety_audit:
+                blocked_actions = self._orchestrator.safety_audit.recent(200)
             return {
                 "active_policy": "default",
                 "readonly_mode": self._is_readonly,
                 "blocked_commands": list(BLOCKED_COMMANDS),
+                "blocked_actions": blocked_actions,
             }
 
+        @app.post("/api/secret-scan")
+        async def secret_scan(data: dict[str, Any] | None = None):
+            data = data or {}
+            include_history = data.get("include_history", False)
+            from galaxy_merge.tools.security_tools import make_security_tools
+            schemas_and_handlers = make_security_tools(self.session.workroot, APP_INSTALL_DIR)
+            for schema, handler in schemas_and_handlers:
+                if schema.name == "secret.scan":
+                    result = await handler(include_history=include_history)
+                    return {"success": result.success, "data": result.data, "error": result.error}
+            return JSONResponse(content={"error": "secret scan tool not available"}, status_code=500)
+
         @app.websocket("/ws/session/{session_id}")
-        async def websocket_endpoint(ws: WebSocket, session_id: str):
+        async def websocket_endpoint(ws: WebSocket, session_id: str, since: int | None = 0):
             if session_id != self.session.session_id:
                 await ws.close(code=4004)
                 return
             await ws.accept()
             self._ws_clients.append(ws)
+            await self._send_replay(ws, since=since or 0)
             try:
                 while True:
-                    await ws.receive_text()
+                    payload = await ws.receive_json()
+                    if not isinstance(payload, dict):
+                        continue
+                    cursor = payload.get("since")
+                    if cursor is not None:
+                        try:
+                            cursor_int = int(cursor)
+                        except (TypeError, ValueError):
+                            continue
+                        await self._send_replay(ws, since=cursor_int)
             except WebSocketDisconnect:
                 pass
+            except asyncio.CancelledError:
+                pass
+            except Exception:
+                pass
             finally:
-                self._ws_clients.remove(ws)
+                try:
+                    self._ws_clients.remove(ws)
+                except ValueError:
+                    pass
 
         @app.on_event("startup")
         async def on_startup():
@@ -533,6 +946,13 @@ class SessionServer:
             await self._orchestrator.initialize()
         try:
             result = await self._orchestrator.execute_goal(goal)
+        except asyncio.CancelledError:
+            self.session.event_log.emit(
+                "goal_cancelled",
+                session_id=self.session.session_id,
+                goal=goal,
+            )
+            return
         except Exception as exc:
             result = {"error": str(exc), "complete": False}
             self.session.event_log.emit(
@@ -543,22 +963,63 @@ class SessionServer:
         await self._broadcast({"type": "goal_result", "result": result})
 
     async def _broadcast(self, data: dict[str, Any]) -> None:
+        clients = list(self._ws_clients)
         dead = []
-        for ws in self._ws_clients:
-            try:
-                await ws.send_json(data)
-            except Exception:
+        for ws in clients:
+            sent = await self._send_with_timeout(ws, data)
+            if not sent:
                 dead.append(ws)
         for ws in dead:
-            self._ws_clients.remove(ws)
+            try:
+                self._ws_clients.remove(ws)
+            except ValueError:
+                pass
+
+    def _events_payload(
+        self,
+        limit: int = 500,
+        offset: int = 0,
+        since: int | None = None,
+        redact: bool = True,
+    ) -> tuple[list[dict[str, Any]], int, int]:
+        safe_limit = max(1, min(limit, 2000))
+        safe_offset = max(0, offset)
+        start = max(0, since if since is not None else safe_offset)
+        events = self.session.event_log.replay()
+        total = len(events)
+        window = events[start:start + safe_limit]
+        if redact:
+            policy = CredentialPolicy(self.session.workroot)
+            window = [_redact_nested(event, policy) for event in window]
+        next_offset = start + len(window)
+        return window, total, next_offset
+
+    async def _send_with_timeout(self, ws: WebSocket, payload: dict[str, Any], timeout: float = 1.5) -> bool:
+        try:
+            await asyncio.wait_for(ws.send_json(payload), timeout=timeout)
+            return True
+        except (asyncio.TimeoutError, Exception):
+            return False
+
+    async def _send_replay(self, ws: WebSocket, since: int = 0, limit: int = 200) -> None:
+        start = max(0, since)
+        events, _, _ = self._events_payload(limit=limit, since=start)
+        for event in events:
+            if not await self._send_with_timeout(ws, event):
+                return
+        await self._send_with_timeout(
+            ws,
+            {
+                "type": "events_replayed",
+                "count": len(events),
+                "since": start,
+            },
+        )
 
     def get_url(self) -> str:
         return f"http://127.0.0.1:{self.port}/"
 
     def serve(self) -> None:
-        if self._socket is None:
-            self._socket = reserve_socket(self.port)
-            self.port = self._socket.getsockname()[1]
         config = uvicorn.Config(
             self.app,
             host="127.0.0.1",
@@ -603,5 +1064,5 @@ def _build_tree(path: Path, base: Path, max_entries: int = 500) -> dict[str, Any
 
 
 def start_server(session: Session, port: int = 0) -> dict:
-    server = SessionServer(session, port=port, strict_socket=True)
+    server = SessionServer(session, port=port)
     return {"server": server, "port": server.port, "url": server.get_url()}

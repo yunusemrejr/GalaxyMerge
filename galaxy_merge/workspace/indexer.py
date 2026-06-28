@@ -24,7 +24,7 @@ class WorkspaceIndexer:
     def _save_hashes(self) -> None:
         path = self.index_dir / "file_hashes.json"
         with FileLock(path.with_suffix(".lock"), timeout=10.0):
-            atomic_write(path, json.dumps(self._file_hashes, indent=2))
+            atomic_write(path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
 
     def _hash_file(self, path: Path) -> str:
         h = hashlib.sha256()
@@ -59,7 +59,7 @@ class WorkspaceIndexer:
         hashes_path = self.index_dir / "file_hashes.json"
         with FileLock(hashes_path.with_suffix(".lock"), timeout=10.0):
             self._file_hashes = current_hashes
-            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2))
+            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
 
         tree = FileTree(self.workroot).build()
 
@@ -94,6 +94,6 @@ class WorkspaceIndexer:
                             changed.append(relative)
                     except (OSError, ValueError):
                         pass
-            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2))
+            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
             total = len(self._file_hashes)
         return {"changed": changed, "total": total}

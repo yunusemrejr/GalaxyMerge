@@ -7,10 +7,16 @@
 
   window.BrowserPanel = {
     async refresh() {
+      await this.refreshSessions();
+      await this.refreshConsole();
+      await this.refreshNetwork();
+      await this.refreshErrors();
+    },
+
+    async refreshSessions() {
       try {
-        const r = await fetch('/api/browser/sessions');
-        const data = await r.json();
-        const container = document.getElementById('browser-panel');
+        const data = await API.get('/api/browser/sessions');
+        const container = document.getElementById('browser-sessions');
         const sessions = data.sessions || [];
         if (sessions.length === 0) {
           container.innerHTML = '<div style="color:var(--fg2);padding:4px">No browser sessions</div>';
@@ -18,11 +24,67 @@
         }
         let html = '';
         for (const s of sessions) {
-          html += `<div class="tree-item" style="padding:2px 0">${escapeHtml(s.session_id)}: ${escapeHtml(s.url)} ${s.running ? 'running' : 'stopped'}</div>`;
+          const status = s.running ? '<span style="color:var(--accent2)">running</span>' : '<span style="color:var(--red)">stopped</span>';
+          html += `<div class="provider-card">
+            <div class="provider-name">${escapeHtml(s.session_id)}</div>
+            <div class="provider-status">${escapeHtml(s.url)} ${status}</div>
+          </div>`;
         }
         container.innerHTML = html;
       } catch (e) {
-        console.error('browser refresh failed', e);
+        console.error('browser sessions refresh failed', e);
+      }
+    },
+
+    async refreshConsole() {
+      try {
+        const data = await API.getBrowserConsole();
+        const container = document.getElementById('browser-console');
+        const logs = data.logs || [];
+        if (logs.length === 0) {
+          container.innerHTML = '<div style="color:var(--fg2);padding:4px">No console logs</div>';
+          return;
+        }
+        let html = '';
+        for (const log of logs.slice(-50)) {
+          const level = (log.level || '').toLowerCase();
+          const color = level === 'error' ? 'var(--red)' : level === 'warn' ? 'var(--yellow)' : 'var(--fg)';
+          html += `<div class="log-line" style="color:${color}">[${escapeHtml(log.level || 'log')}] ${escapeHtml(log.text || log.message || '')}</div>`;
+        }
+        container.innerHTML = html;
+        container.scrollTop = container.scrollHeight;
+      } catch (e) {
+        console.error('browser console refresh failed', e);
+      }
+    },
+
+    async refreshNetwork() {
+      try {
+        const data = await API.getBrowserNetwork();
+        const container = document.getElementById('browser-network');
+        const logs = data.logs || [];
+        if (logs.length === 0) {
+          container.innerHTML = '<div style="color:var(--fg2);padding:4px">No network logs</div>';
+          return;
+        }
+        let html = '';
+        for (const log of logs.slice(-30)) {
+          const failed = log.failed || (log.status >= 400);
+          const color = failed ? 'var(--red)' : 'var(--fg2)';
+          html += `<div class="log-line" style="color:${color}">${escapeHtml(log.method || 'GET')} ${escapeHtml(log.url || '')} ${log.status || ''}</div>`;
+        }
+        container.innerHTML = html;
+      } catch (e) {
+        console.error('browser network refresh failed', e);
+      }
+    },
+
+    async refreshErrors() {
+      try {
+        const container = document.getElementById('browser-errors');
+        container.innerHTML = '<div style="color:var(--fg2);padding:4px">Page errors captured via CDP</div>';
+      } catch (e) {
+        console.error('browser errors refresh failed', e);
       }
     }
   };

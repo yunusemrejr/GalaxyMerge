@@ -9,9 +9,15 @@
 <body>
 <div id="top-bar">
   <span class="bar-item" id="bar-project">Project: --</span>
-  <span class="bar-item" id="bar-session">Session: --</span>
+  <span class="bar-item" id="bar-workroot">WorkRoot: --</span>
+  <span class="bar-item" id="bar-taskscope">TaskScope: --</span>
+  <span class="bar-item bar-picker">
+    <label for="session-picker" style="font-size:10px;color:var(--fg2)">Session:</label>
+    <select id="session-picker"></select>
+  </span>
   <span class="bar-item" id="bar-goal">Goal: idle</span>
   <span class="bar-item" id="bar-safety">Safety: enabled</span>
+  <span class="bar-item" id="bar-connection">Backend: --</span>
   <span class="bar-item" id="bar-providers">Providers: --</span>
 </div>
 
@@ -32,7 +38,16 @@
       <span id="goal-phase">idle</span>
       <span id="goal-phase-detail" style="color:var(--fg2);margin-left:12px"></span>
     </div>
-    <div id="chat-stream" class="pane-content"></div>
+    <div class="center-tabs">
+      <button class="center-tab-btn active" data-center-tab="stream">Stream</button>
+      <button class="center-tab-btn" data-center-tab="plan">Plan</button>
+      <button class="center-tab-btn" data-center-tab="diff">Diff</button>
+      <button class="center-tab-btn" data-center-tab="output">Output</button>
+    </div>
+    <div id="stream-panel" class="center-tab-content active"></div>
+    <div id="plan-panel" class="center-tab-content"></div>
+    <div id="diff-panel" class="center-tab-content"></div>
+    <div id="output-panel" class="center-tab-content"></div>
     <div id="goal-input-area">
       <textarea id="goal-input" rows="2" placeholder="Enter a goal..."></textarea>
       <button id="goal-submit">Go</button>
@@ -47,13 +62,61 @@
       <button class="tab-btn" data-tab="safety">Safety</button>
       <button class="tab-btn" data-tab="browser">Browser</button>
       <button class="tab-btn" data-tab="locations">Locs</button>
+      <button class="tab-btn" data-tab="verify">Verify</button>
     </div>
-    <div id="council-panel" class="tab-content active"></div>
+    <div id="council-panel" class="tab-content active">
+      <div class="sub-tabs">
+        <button class="sub-tab-btn active" data-sub-tab="council-roles">Roles</button>
+        <button class="sub-tab-btn" data-sub-tab="council-providers">Providers</button>
+        <button class="sub-tab-btn" data-sub-tab="council-failures">Failures</button>
+      </div>
+      <div id="council-roles" class="sub-tab-content active"></div>
+      <div id="council-providers" class="sub-tab-content"></div>
+      <div id="council-failures" class="sub-tab-content"></div>
+    </div>
     <div id="tools-panel" class="tab-content"></div>
-    <div id="logs-panel" class="tab-content"></div>
-    <div id="safety-panel" class="tab-content"></div>
-    <div id="browser-panel" class="tab-content"></div>
+    <div id="logs-panel" class="tab-content">
+      <div class="logs-controls">
+        <button class="pane-btn" id="logs-clear">Clear</button>
+        <span id="logs-count" style="color:var(--fg2);font-size:10px"></span>
+      </div>
+      <div id="logs-container"></div>
+      <div class="logs-pagination">
+        <button class="pane-btn" id="logs-prev" disabled>&laquo; Prev</button>
+        <span id="logs-page">1</span>
+        <button class="pane-btn" id="logs-next">Next &raquo;</button>
+      </div>
+    </div>
+    <div id="safety-panel" class="tab-content">
+      <div class="sub-tabs">
+        <button class="sub-tab-btn active" data-sub-tab="safety-status">Status</button>
+        <button class="sub-tab-btn" data-sub-tab="safety-blocked">Blocked</button>
+        <button class="sub-tab-btn" data-sub-tab="safety-audit">Audit</button>
+      </div>
+      <div id="safety-status" class="sub-tab-content active"></div>
+      <div id="safety-blocked" class="sub-tab-content"></div>
+      <div id="safety-audit" class="sub-tab-content"></div>
+    </div>
+    <div id="browser-panel" class="tab-content">
+      <div class="sub-tabs">
+        <button class="sub-tab-btn active" data-sub-tab="browser-sessions">Sessions</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-console">Console</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-network">Network</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-errors">Errors</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-screenshot">Screenshot</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-sources">Web Sources</button>
+        <button class="sub-tab-btn" data-sub-tab="browser-github">GitHub Scan</button>
+      </div>
+      <div id="browser-sessions" class="sub-tab-content active"></div>
+      <div id="browser-console" class="sub-tab-content"></div>
+      <div id="browser-network" class="sub-tab-content"></div>
+      <div id="browser-errors" class="sub-tab-content"></div>
+      <div id="browser-screenshot" class="sub-tab-content"></div>
+      <div id="browser-sources" class="sub-tab-content"></div>
+      <div id="browser-github" class="sub-tab-content"></div>
+    </div>
     <div id="locations-panel" class="tab-content"></div>
+    <div id="verify-panel" class="tab-content"></div>
   </div>
 </div>
 
@@ -67,6 +130,7 @@
 <script src="/js/panels/safety.js"></script>
 <script src="/js/panels/memory.js"></script>
 <script src="/js/panels/notes.js"></script>
+<script src="/js/panels/skills.js"></script>
 <script src="/js/panels/browser.js"></script>
 <script src="/js/panels/locations.js"></script>
 <script src="/js/app.js"></script>

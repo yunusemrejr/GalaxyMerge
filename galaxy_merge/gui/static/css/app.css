@@ -208,3 +208,295 @@ html, body {
 .safety-entry.blocked { color: var(--red); }
 
 #council-panel, #tools-panel, #memory-panel { font-size: 11px; }
+
+.center-tabs {
+  display: flex;
+  background: var(--bg2);
+  gap: 1px;
+  border-bottom: 1px solid var(--border);
+}
+.center-tab-btn {
+  flex: 1;
+  background: var(--bg2);
+  border: none;
+  color: var(--fg2);
+  padding: 5px 4px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 11px;
+}
+.center-tab-btn.active {
+  background: var(--bg3);
+  color: var(--fg);
+  border-bottom: 2px solid var(--accent);
+}
+.center-tab-btn:hover { color: var(--fg); }
+
+.center-tab-content {
+  display: none;
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px 8px;
+}
+.center-tab-content.active { display: block; }
+
+.sub-tabs {
+  display: flex;
+  background: var(--bg3);
+  gap: 1px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 4px;
+}
+.sub-tab-btn {
+  background: var(--bg3);
+  border: none;
+  color: var(--fg2);
+  padding: 3px 6px;
+  cursor: pointer;
+  font-family: var(--font);
+  font-size: 10px;
+}
+.sub-tab-btn.active {
+  color: var(--fg);
+  border-bottom: 1px solid var(--accent);
+}
+.sub-tab-btn:hover { color: var(--fg); }
+
+.sub-tab-content {
+  display: none;
+  padding: 4px;
+}
+.sub-tab-content.active { display: block; }
+
+.logs-controls {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 2px 4px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+.logs-pagination {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  padding: 4px;
+  background: var(--bg3);
+  border-top: 1px solid var(--border);
+  font-size: 10px;
+}
+.logs-pagination button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg2);
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 10px;
+}
+.logs-pagination button:disabled {
+  opacity: 0.4;
+  cursor: default;
+}
+.logs-pagination button:hover:not(:disabled) {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.provider-card {
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  font-size: 11px;
+}
+.provider-card .provider-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.provider-card .provider-status {
+  font-size: 10px;
+}
+.provider-card .provider-warning {
+  color: var(--yellow);
+  font-size: 10px;
+}
+.provider-card .provider-error {
+  color: var(--red);
+  font-size: 10px;
+}
+
+.failure-entry {
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  font-size: 10px;
+}
+.failure-entry .failure-role {
+  color: var(--accent);
+}
+.failure-entry .failure-error {
+  color: var(--red);
+}
+.failure-entry .failure-time {
+  color: var(--fg2);
+  font-size: 9px;
+}
+
+.note-item {
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  cursor: pointer;
+}
+.note-item:hover { background: var(--bg3); }
+.note-item .note-name {
+  color: var(--accent);
+  font-weight: 600;
+}
+.note-item .note-preview {
+  color: var(--fg2);
+  font-size: 10px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.note-item .note-tags {
+  color: var(--yellow);
+  font-size: 9px;
+}
+.note-item .note-pinned {
+  color: var(--accent2);
+  font-size: 9px;
+}
+.note-item .note-actions {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.note-item .note-actions button {
+  background: none;
+  border: 1px solid var(--border);
+  color: var(--fg2);
+  padding: 1px 4px;
+  cursor: pointer;
+  font-size: 9px;
+}
+.note-item .note-actions button:hover {
+  color: var(--fg);
+  border-color: var(--accent);
+}
+
+.note-search {
+  display: flex;
+  gap: 4px;
+  padding: 4px;
+  background: var(--bg3);
+  border-bottom: 1px solid var(--border);
+}
+.note-search input {
+  flex: 1;
+  background: var(--bg);
+  border: 1px solid var(--border);
+  color: var(--fg);
+  padding: 2px 4px;
+  font-size: 10px;
+  font-family: var(--font);
+}
+.note-search input:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.note-search button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 2px 6px;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.trash-header {
+  color: var(--yellow);
+  font-size: 10px;
+  padding: 4px;
+  border-bottom: 1px solid var(--border);
+}
+
+.location-card {
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  font-size: 11px;
+}
+.location-card .loc-target {
+  color: var(--accent);
+  font-weight: 600;
+  word-break: break-all;
+}
+.location-card .loc-class {
+  font-size: 10px;
+}
+.location-card .loc-risk-high { color: var(--red); }
+.location-card .loc-risk-medium { color: var(--yellow); }
+.location-card .loc-risk-low { color: var(--accent2); }
+.location-card .loc-policy {
+  font-size: 10px;
+  color: var(--fg2);
+}
+
+.verify-entry {
+  border-bottom: 1px solid var(--border);
+  padding: 4px;
+  font-size: 11px;
+}
+.verify-entry .verify-pass { color: var(--accent2); }
+.verify-entry .verify-fail { color: var(--red); }
+.verify-entry .verify-detail { color: var(--fg2); font-size: 10px; }
+
+.goal-state {
+  padding: 4px 8px;
+  font-size: 11px;
+  background: var(--bg2);
+  border-bottom: 1px solid var(--border);
+}
+.goal-state .goal-state-label {
+  color: var(--fg2);
+}
+.goal-state .goal-state-value {
+  color: var(--fg);
+  font-weight: 600;
+}
+.goal-state .goal-state-running { color: var(--accent); }
+.goal-state .goal-state-blocked { color: var(--red); }
+.goal-state .goal-state-degraded { color: var(--yellow); }
+.goal-state .goal-state-complete { color: var(--accent2); }
+
+.memory-section {
+  margin-bottom: 8px;
+}
+.memory-section-header {
+  color: var(--accent);
+  font-size: 10px;
+  text-transform: uppercase;
+  padding: 2px 0;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 2px;
+}
+.memory-entry {
+  font-size: 10px;
+  padding: 2px 0;
+  color: var(--fg2);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.screenshot-container {
+  padding: 4px;
+  text-align: center;
+}
+.screenshot-container img {
+  max-width: 100%;
+  border: 1px solid var(--border);
+}
+.screenshot-container .screenshot-placeholder {
+  color: var(--fg2);
+  font-size: 10px;
+  padding: 20px;
+}

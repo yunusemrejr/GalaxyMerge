@@ -18,7 +18,7 @@ class MemoryRetriever:
 
         notes_context = ""
         notes_dir = self.gm_dir / "notes"
-        injected = get_injected_notes()
+        injected = get_injected_notes(self.gm_dir)
         note_parts = []
 
         if injected:
@@ -62,4 +62,4 @@ class MemoryRetriever:
 
     def clear_for_new_goal(self) -> None:
         self._note_roles.clear()
-        clear_goal_injections()
+        clear_goal_injections(self.gm_dir)

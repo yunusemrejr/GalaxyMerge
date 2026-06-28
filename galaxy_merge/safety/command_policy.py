@@ -80,6 +80,25 @@ ENV_INJECTION_PATTERNS: list[str] = [
     r"^TEMPDIR=",
 ]
 
+NUKE_PIPE_PATTERNS: list[str] = [
+    "curl",
+    "wget",
+    "fetch",
+    "httpie",
+]
+
+DIRECT_DOWNLOAD_KILL_SWITCHES: list[str] = [
+    "| sh",
+    "| bash",
+    "| zsh",
+    "| fish",
+    "| python",
+    "| python3",
+    "| node",
+    "| perl",
+    "| ruby",
+]
+
 DANGEROUS_CODE_PATTERNS = [
     r"python[\d.]*\s+-c\s+['\"].*os\.system\s*\(",
     r"python[\d.]*\s+-c\s+['\"].*subprocess\..*run\s*\(",
@@ -195,6 +214,18 @@ def _contains_destructive_chown(command: str) -> bool:
     return False
 
 
+def _contains_nuke_pipe(command: str) -> bool:
+    """Detect curl|sh, wget|bash etc. — pipe from download to shell."""
+    command_lower = command.lower()
+    has_downloader = any(dp in command_lower for dp in NUKE_PIPE_PATTERNS)
+    if not has_downloader:
+        return False
+    for switch in DIRECT_DOWNLOAD_KILL_SWITCHES:
+        if switch in command_lower:
+            return True
+    return False
+
+
 def _contains_dangerous_code(command: str) -> bool:
     for pat in DANGEROUS_CODE_PATTERNS:
         if re.search(pat, command):
@@ -282,6 +313,9 @@ class CommandPolicy:
                 "decision": "allow_with_audit",
                 "reason": f"remote mutation pattern: {remote_result.reason} — requires deployment policy",
             }
+
+        if _contains_nuke_pipe(stripped):
+            return {"decision": "block", "reason": "download-to-shell pipe blocked (curl|sh etc.)"}
 
         if _contains_dangerous_code(stripped):
             return {"decision": "block", "reason": "dangerous code execution pattern detected"}

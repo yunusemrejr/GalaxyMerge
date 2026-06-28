@@ -28,7 +28,7 @@ SECRET_PATTERNS = [
 PLACEHOLDER_PATTERNS = [
     re.compile(r'EXAMPLE|example|test|fake|placeholder', re.IGNORECASE),
     re.compile(r'1234567890abcdef|abc123|def456|hunter2|my_super_secret', re.IGNORECASE),
-    re.compile(r'sk-xxxx|sk-xxx|sk-[x]{10,}|ghp_[x]{10,}', re.IGNORECASE),
+    re.compile(r'sk-xxxx|sk-xxx|sk-[x]{10,}|ghp_[x]{10,}|ghp_1234', re.IGNORECASE),
     re.compile(r'MIIEpQIBAAKCAQEA|MIIEpQIBAAK|ABCDEFG', re.IGNORECASE),
     re.compile(r'b3BlbnNzaC1rZXktdjE', re.IGNORECASE),
     re.compile(r'dozjgNryP4J3j5M0uRvFQZ1O7A', re.IGNORECASE),

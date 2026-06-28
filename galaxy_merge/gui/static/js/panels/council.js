@@ -9,27 +9,85 @@
   }
 
   window.CouncilPanel = {
-    render(data) {
-      const container = document.getElementById('council-panel');
-      if (!data || data.length === 0) {
-        container.innerHTML = '<div style="color:var(--fg2);padding:4px">No council data</div>';
+    async refresh() {
+      try {
+        const data = await API.getCouncil();
+        this.renderRoles(data.roles || []);
+        this.renderProviders(data.providers || []);
+        this.renderFailures(data.provider_failures || [], data.fallback_events || []);
+      } catch (e) {
+        console.error('council refresh failed', e);
+      }
+    },
+
+    renderRoles(roles) {
+      const container = document.getElementById('council-roles');
+      if (!roles || roles.length === 0) {
+        container.innerHTML = '<div style="color:var(--fg2);padding:4px">No council roles</div>';
         return;
       }
-      let html = '<table style="width:100%;border-collapse:collapse;font-size:11px">';
-      html += '<tr style="color:var(--fg2)"><th>Role</th><th>Provider</th><th>Model</th><th>Status</th><th>Error</th></tr>';
-      for (const entry of data) {
+      let html = '';
+      for (const entry of roles) {
         const rawStatus = String(entry.status || (entry.error ? 'degraded' : 'ok')).toUpperCase();
         const failed = rawStatus === 'DEGRADED' || rawStatus === 'FAILED';
         const color = failed ? 'var(--red)' : rawStatus === 'FALLBACK' ? 'var(--yellow)' : 'var(--accent2)';
-        html += `<tr style="border-bottom:1px solid var(--border)">
-          <td>${escapeHtml(entry.role)}</td>
-          <td>${escapeHtml(entry.provider || entry.provider_id)}</td>
-          <td>${escapeHtml(entry.model)}</td>
-          <td style="color:${color};font-weight:600">${escapeHtml(rawStatus)}</td>
-          <td style="color:${color};max-width:320px;white-space:normal">${escapeHtml(entry.error)}</td>
-        </tr>`;
+        html += `<div class="provider-card">
+          <div>
+            <span class="provider-name">${escapeHtml(entry.role)}</span>
+            <span style="color:${color};font-weight:600;font-size:10px"> ${escapeHtml(rawStatus)}</span>
+          </div>
+          <div style="font-size:10px;color:var(--fg2)">
+            ${escapeHtml(entry.provider || entry.provider_id)} / ${escapeHtml(entry.model)}
+          </div>
+          ${entry.error ? `<div class="provider-error">${escapeHtml(entry.error)}</div>` : ''}
+        </div>`;
       }
-      html += '</table>';
+      container.innerHTML = html;
+    },
+
+    renderProviders(providers) {
+      const container = document.getElementById('council-providers');
+      if (!providers || providers.length === 0) {
+        container.innerHTML = '<div style="color:var(--fg2);padding:4px">No providers configured</div>';
+        return;
+      }
+      let html = '';
+      for (const p of providers) {
+        const statusColor = p.available ? 'var(--accent2)' : 'var(--red)';
+        html += `<div class="provider-card">
+          <div>
+            <span class="provider-name">${escapeHtml(p.provider_id || p.id || '')}</span>
+            <span style="color:${statusColor};font-size:10px"> ${p.available ? 'available' : 'unavailable'}</span>
+          </div>
+          ${p.warning ? `<div class="provider-warning">${escapeHtml(p.warning)}</div>` : ''}
+          ${p.error ? `<div class="provider-error">${escapeHtml(p.error)}</div>` : ''}
+        </div>`;
+      }
+      container.innerHTML = html;
+    },
+
+    renderFailures(failures, fallbacks) {
+      const container = document.getElementById('council-failures');
+      if ((!failures || failures.length === 0) && (!fallbacks || fallbacks.length === 0)) {
+        container.innerHTML = '<div style="color:var(--fg2);padding:4px">No failures or fallbacks</div>';
+        return;
+      }
+      let html = '';
+      for (const f of failures || []) {
+        html += `<div class="failure-entry">
+          <span class="failure-role">${escapeHtml(f.role)}</span>
+          <span style="color:var(--fg2)"> ${escapeHtml(f.provider || f.provider_id)}</span>
+          <div class="failure-error">${escapeHtml(f.error || '')}</div>
+          <div class="failure-time">${escapeHtml(f.time || '')}</div>
+        </div>`;
+      }
+      for (const fb of fallbacks || []) {
+        html += `<div class="failure-entry">
+          <span class="failure-role">${escapeHtml(fb.role)}</span>
+          <span style="color:var(--yellow)"> ${escapeHtml(fb.from_provider)} → ${escapeHtml(fb.to_provider)}</span>
+          <div class="failure-time">${escapeHtml(fb.time || '')}</div>
+        </div>`;
+      }
       container.innerHTML = html;
     }
   };

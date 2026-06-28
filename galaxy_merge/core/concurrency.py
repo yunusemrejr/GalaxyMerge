@@ -21,21 +21,63 @@ _PATCHED: set[str] = set()
 # ── Session registry ─────────────────────────────────────────────────
 
 
-def register_active_session(gm_dir: Path, session_id: str) -> None:
+def register_active_session(
+    gm_dir: Path,
+    session_id: str,
+    *,
+    port: int | None = None,
+    pid: int | None = None,
+) -> None:
     """Append this session to the project-level active-sessions registry.
 
-    The registry is an append-only JSONL so concurrent registrations
-    are safe under our atomic_append.
+    This includes a session->port mapping for backend reuse/cleanup.
+    The registry and mapping are written safely for concurrent writers.
     """
+    now = time.time()
     registry_path = gm_dir / "sessions" / "registry.jsonl"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     from galaxy_merge.core.locks import atomic_append
     record = {
         "session_id": session_id,
-        "started_at": time.time(),
-        "last_heartbeat": time.time(),
+        "started_at": now,
+        "last_heartbeat": now,
     }
     atomic_append(registry_path, json.dumps(record))
+
+    ports_path = gm_dir / "sessions" / "ports.json"
+    lock_path = ports_path.with_suffix(".lock")
+    with FileLock(lock_path, timeout=10.0):
+        if ports_path.exists():
+            try:
+                mapping = json.loads(ports_path.read_text())
+            except (json.JSONDecodeError, OSError):
+                mapping = {}
+        else:
+            mapping = {}
+        if not isinstance(mapping, dict):
+            mapping = {}
+        mapping[session_id] = {
+            "session_id": session_id,
+            "port": port,
+            "pid": pid,
+            "workroot": str(gm_dir.parent),
+            "updated_at": now,
+            "status": "running",
+        }
+        atomic_write(ports_path, json.dumps(mapping, indent=2), _nested_lock=True)
+
+
+def read_active_port_map(gm_dir: Path) -> dict[str, dict[str, Any]]:
+    """Read current session->port map."""
+    ports_path = gm_dir / "sessions" / "ports.json"
+    if not ports_path.exists():
+        return {}
+    try:
+        with open(ports_path) as f:
+            payload = json.loads(f.read())
+    except (OSError, json.JSONDecodeError):
+        return {}
+    return payload if isinstance(payload, dict) else {}
 
 
 def write_heartbeat(gm_dir: Path, session_id: str) -> None:
@@ -58,37 +100,61 @@ def cleanup_stale_sessions(
 
     for hb_file in hb_dir.glob("*.hb"):
         try:
-            if now - hb_file.stat().st_mtime > max_age:
-                session_id = hb_file.stem
-                session_dir = gm_dir / "sessions" / session_id
-                if session_dir.exists():
-                    import shutil
+            content = hb_file.read_text().strip()
+            if content:
+                hb_time = float(content)
+            else:
+                hb_time = hb_file.stat().st_mtime
+        if now - hb_time > max_age:
+            session_id = hb_file.stem
+            session_dir = gm_dir / "sessions" / session_id
+            if session_dir.exists():
+                import shutil
                     shutil.rmtree(session_dir, ignore_errors=True)
                 hb_file.unlink(missing_ok=True)
                 stale.append(session_id)
-        except OSError:
+        except (OSError, ValueError):
             pass
 
-    # Also remove stale entries from registry
-    registry_path = gm_dir / "sessions" / "registry.jsonl"
-    if registry_path.exists():
-        active_ids = {s.stem for s in hb_dir.glob("*.hb")}
-        new_lines: list[str] = []
-        try:
-            for line in registry_path.read_text().splitlines():
-                line = line.strip()
-                if not line:
-                    continue
+    if stale:
+        registry_path = gm_dir / "sessions" / "registry.jsonl"
+        if registry_path.exists():
+            active_ids = {s.stem for s in hb_dir.glob("*.hb")}
+            new_lines: list[str] = []
+            try:
+                lock_path = registry_path.with_suffix(".lock")
+                with FileLock(lock_path, timeout=10.0):
+                    for line in registry_path.read_text().splitlines():
+                        line = line.strip()
+                        if not line:
+                            continue
+                        try:
+                            rec = json.loads(line)
+                            if rec.get("session_id") in active_ids:
+                                new_lines.append(line)
+                        except json.JSONDecodeError:
+                            pass
+                    content = "\n".join(new_lines)
+                    atomic_write(registry_path, content + ("\n" if content else ""), _nested_lock=True)
+            except (OSError, LockTimeout):
+                pass
+
+        ports_path = gm_dir / "sessions" / "ports.json"
+        if ports_path.exists():
+            lock_path = ports_path.with_suffix(".lock")
+            with FileLock(lock_path, timeout=10.0):
                 try:
-                    rec = json.loads(line)
-                    if rec.get("session_id") in active_ids:
-                        new_lines.append(line)
-                except json.JSONDecodeError:
-                    pass
-            content = "\n".join(new_lines)
-            atomic_write(registry_path, content + ("\n" if content else ""))
-        except OSError:
-            pass
+                    if ports_path.exists():
+                        mapping = json.loads(ports_path.read_text())
+                    else:
+                        mapping = {}
+                    if not isinstance(mapping, dict):
+                        mapping = {}
+                except (OSError, json.JSONDecodeError):
+                    mapping = {}
+                for sid in stale:
+                    mapping.pop(sid, None)
+                atomic_write(ports_path, json.dumps(mapping, indent=2), _nested_lock=True)
 
     return stale
 
@@ -168,7 +234,7 @@ def patch_memory_store() -> None:
                 except (json.JSONDecodeError, OSError):
                     pass
             prefs[key] = value
-            atomic_write(prefs_path, json.dumps(prefs, indent=2))
+            atomic_write(prefs_path, json.dumps(prefs, indent=2), _nested_lock=True)
 
     @functools.wraps(_orig_read_all)
     def _safe_read_all(self, kind: str) -> list[dict[str, Any]]:
@@ -266,7 +332,7 @@ def patch_cache_store() -> None:
         expires = time.time() + ttl_seconds if ttl_seconds else 0
         data = {"value": value, "_expires": expires, "_created": time.time()}
         with FileLock(lock_path, timeout=5.0):
-            atomic_write(path, json.dumps(data, default=str))
+            atomic_write(path, json.dumps(data, default=str), _nested_lock=True)
 
     @functools.wraps(_orig_get)
     def _safe_get(self, key: str) -> Any | None:
@@ -324,7 +390,8 @@ def patch_session() -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         for sub in ["diffs", "artifacts"]:
             (self.session_dir / sub).mkdir(parents=True, exist_ok=True)
-        for fname in ["transcript.jsonl", "council.jsonl", "tool_calls.jsonl", "safety.jsonl"]:
+        for fname in ["transcript.jsonl", "council.jsonl", "tool_calls.jsonl",
+                       "safety.jsonl", "provider_events.jsonl", "compaction.jsonl"]:
             p = self.session_dir / fname
             if not p.exists():
                 p.touch()
@@ -377,7 +444,7 @@ def patch_workspace_indexer() -> None:
         path = self.index_dir / "file_hashes.json"
         lock_path = path.with_suffix(".lock")
         with FileLock(lock_path, timeout=10.0):
-            atomic_write(path, json.dumps(self._file_hashes, indent=2))
+            atomic_write(path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
 
     @functools.wraps(_orig_refresh)
     def _safe_refresh(self) -> dict[str, Any]:
@@ -444,7 +511,7 @@ def patch_workspace_indexer() -> None:
                             changed.append(relative)
                     except (OSError, ValueError):
                         pass
-            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2))
+            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
         return {"changed": changed, "total": len(self._file_hashes)}
 
     WorkspaceIndexer._save_hashes = _safe_save_hashes
@@ -517,11 +584,11 @@ def patch_notes_tools() -> None:
     _orig_get_idx = nt._get_index
 
     @functools.wraps(_orig_save_idx)
-    def _safe_save_index(notes_dir: Path, index: dict[str, Any]) -> None:
+    def _safe_save_index(notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False) -> None:
         idx_path = notes_dir / "index.json"
         lock_path = idx_path.with_suffix(".lock")
         with FileLock(lock_path, timeout=5.0):
-            atomic_write(idx_path, json.dumps(index, indent=2))
+            atomic_write(idx_path, json.dumps(index, indent=2), _nested_lock=True)
 
     @functools.wraps(_orig_get_idx)
     def _safe_get_index(notes_dir: Path) -> dict[str, Any]:

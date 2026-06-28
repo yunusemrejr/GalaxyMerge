@@ -64,7 +64,7 @@ def make_file_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
                     "current_hash": current_hash,
                     "conflict": True,
                 })
-            atomic_write(target, content)
+            atomic_write(target, content, _nested_lock=True)
         return ToolResult(success=True, data={
             "path": str(target.relative_to(workroot)),
             "size": len(content),
@@ -195,7 +195,7 @@ def make_file_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
                     return ToolResult(success=False, error=f"hunk not found in file:\n{old[:200]}")
                 content = content.replace(old, new, 1)
 
-            atomic_write(target, content)
+            atomic_write(target, content, _nested_lock=True)
         return ToolResult(success=True, data={
             "path": str(target.relative_to(workroot)),
             "hunks_applied": len(hunks),
