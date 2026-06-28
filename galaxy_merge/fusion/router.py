@@ -41,7 +41,7 @@ class FusionRouter:
         councils = self._fusion_config.get("councils", {})
         return councils.get(fallback_name, {})
 
-    def create_council(self, task_type: str, goal: str, event_log=None) -> Council:
+    def create_council(self, task_type: str, goal: str, event_log=None, session_id: str = "") -> Council:
         config = self.select_council(task_type)
-        council = Council(self.providers, config, goal, event_log=event_log)
+        council = Council(self.providers, config, goal, event_log=event_log, session_id=session_id)
         return council

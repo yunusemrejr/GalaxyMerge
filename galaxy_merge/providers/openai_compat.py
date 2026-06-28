@@ -4,6 +4,7 @@ from typing import Any
 import httpx
 
 from galaxy_merge.providers.base import ProviderBase
+from galaxy_merge.safety.credential_policy import redact_text
 
 
 class OpenAICompatibleProvider(ProviderBase):
@@ -72,9 +73,9 @@ class OpenAICompatibleProvider(ProviderBase):
             except httpx.TimeoutException:
                 return {"success": False, "error": "request timed out"}
             except httpx.HTTPStatusError as e:
-                return {"success": False, "error": f"HTTP {e.response.status_code}: {e.response.text}"}
+                return {"success": False, "error": redact_text(f"HTTP {e.response.status_code}: {e.response.text}")}
             except Exception as e:
-                return {"success": False, "error": str(e)}
+                return {"success": False, "error": redact_text(str(e))}
 
     async def check_health(self) -> bool:
         if not self.available:

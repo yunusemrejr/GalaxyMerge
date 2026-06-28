@@ -7,6 +7,8 @@ from typing import Any
 from galaxy_merge.providers.base import ProviderBase
 from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
 from galaxy_merge.providers.local_ollama import OllamaProvider
+from galaxy_merge.providers.mock import MockProvider
+from galaxy_merge.safety.credential_policy import redact_text
 
 logger = logging.getLogger("galaxy_merge.providers")
 
@@ -159,13 +161,14 @@ def _minimum_context_window(role: str) -> int:
 
 
 class ProviderRegistry:
-    def __init__(self, config_dir: Path, event_log=None):
+    def __init__(self, config_dir: Path, event_log=None, session_id: str = ""):
         self.config_dir = config_dir
         self._providers: dict[str, ProviderBase] = {}
         self._models: dict[str, dict[str, Any]] = {}
         self._provider_health: dict[str, bool] = {}
         self._load_errors: list[str] = []
         self._event_log = event_log
+        self._session_id = session_id
 
     def load(self) -> None:
         self._providers.clear()
@@ -240,7 +243,6 @@ class ProviderRegistry:
         elif ptype == "ollama":
             return OllamaProvider(provider_id, config)
         elif ptype == "mock":
-            from galaxy_merge.tests.test_fusion_council import MockProvider
             return MockProvider(provider_id, config)
         return None
 
@@ -297,22 +299,28 @@ class ProviderRegistry:
         error: str = "",
         attempt: int = 0,
         duration_ms: int = 0,
+        retry_count: int = 0,
+        fallback_decision: str = "",
     ) -> None:
         provider = self._providers.get(provider_id)
         if provider:
+            redacted_error = redact_text(error)
             provider._healthy = False
             provider._available = False
-            provider._warning = error or "provider marked unhealthy"
+            provider._warning = redacted_error or "provider marked unhealthy"
             if self._event_log:
                 self._event_log.emit(
                     "provider_failed",
+                    session_id=self._session_id,
                     provider_id=provider_id,
                     model=model,
                     role=role,
-                    error=error,
-                    error_type=_classify_provider_error(error),
+                    error=redacted_error,
+                    error_type=_classify_provider_error(redacted_error),
                     duration_ms=duration_ms,
                     attempt=attempt,
+                    retry_count=retry_count,
+                    fallback_decision=fallback_decision,
                 )
             logger.warning("Provider %s marked unhealthy", provider_id)
 

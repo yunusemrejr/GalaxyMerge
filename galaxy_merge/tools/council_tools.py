@@ -7,7 +7,12 @@ from galaxy_merge.fusion.synthesizer import Synthesizer
 from galaxy_merge.fusion.reviewer import review_fusion_result
 
 
-def make_council_tools(provider_registry, fusion_config: dict[str, Any]) -> list[tuple[ToolSchema, Any]]:
+def make_council_tools(
+    provider_registry,
+    fusion_config: dict[str, Any],
+    event_log=None,
+    session_id: str = "",
+) -> list[tuple[ToolSchema, Any]]:
     synthesizer = Synthesizer()
 
     async def council_spawn(
@@ -25,7 +30,7 @@ def make_council_tools(provider_registry, fusion_config: dict[str, Any]) -> list
         if roles:
             config["roles"] = roles
 
-        council = Council(provider_registry, config, goal)
+        council = Council(provider_registry, config, goal, event_log=event_log, session_id=session_id)
         results = await council.execute()
 
         return ToolResult(success=True, data={
@@ -33,6 +38,8 @@ def make_council_tools(provider_registry, fusion_config: dict[str, Any]) -> list
             "goal": goal,
             "results": results,
             "roles_executed": list(results.keys()),
+            "degraded_roles": council.get_degraded_roles(),
+            "failed_roles": council.get_failed_roles(),
         })
 
     async def council_synthesize(

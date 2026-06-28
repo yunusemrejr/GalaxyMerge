@@ -2,7 +2,14 @@ from pathlib import Path
 
 import pytest
 
-from galaxy_merge.app.server import SessionServer, _build_tree, build_locations_payload, build_logs_payload, build_notes_payload
+from galaxy_merge.app.server import (
+    SessionServer,
+    _build_tree,
+    build_council_event_summary,
+    build_locations_payload,
+    build_logs_payload,
+    build_notes_payload,
+)
 from galaxy_merge.app.launcher import Launcher
 from galaxy_merge.core.session import Session, init_gm_dir
 
@@ -116,6 +123,48 @@ class TestPayloadBuilders:
         data = build_locations_payload(session.workroot, session.gm_dir)
 
         assert data["workroot"] == str(session.workroot)
+
+    def test_council_payload_summarizes_and_redacts_provider_failures(self, tmp_path: Path) -> None:
+        events = [
+            {
+                "time": "2026-06-28T10:00:00+00:00",
+                "event": "provider_called",
+                "role": "reviewer",
+                "provider_id": "mock_a",
+                "model": "mock-review",
+                "attempt": 1,
+            },
+            {
+                "time": "2026-06-28T10:00:01+00:00",
+                "event": "role_execution_failed",
+                "role": "reviewer",
+                "provider_id": "mock_a",
+                "model": "mock-review",
+                "error": "HTTP 401 OPENAI_API_KEY=sk-testtesttesttesttesttest",
+                "error_type": "auth",
+                "attempt": 1,
+                "retry_count": 2,
+                "fallback_decision": "pending",
+                "duration_ms": 4,
+            },
+            {
+                "time": "2026-06-28T10:00:02+00:00",
+                "event": "role_fallback",
+                "role": "reviewer",
+                "from_provider": "mock_a",
+                "to_provider": "mock_b",
+                "model": "mock-review-b",
+                "fallback_decision": "selected",
+                "retry_count": 2,
+            },
+        ]
+
+        data = build_council_event_summary(events, tmp_path)
+
+        assert data["degraded_roles"] == ["reviewer"]
+        assert data["roles"][0]["status"] == "degraded"
+        assert data["roles"][0]["error"] == "HTTP 401 OPENAI_API_KEY=***REDACTED***"
+        assert data["fallback_events"][0]["to_provider"] == "mock_b"
 
 
 class TestSafety:

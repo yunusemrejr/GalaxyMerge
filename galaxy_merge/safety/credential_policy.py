@@ -154,3 +154,8 @@ class CredentialPolicy:
         text = ENV_ASSIGN_PATTERN.sub(redact_env_assign, text)
 
         return text
+
+
+def redact_text(text: str) -> str:
+    """Redact credential-shaped values from text without requiring a WorkRoot."""
+    return CredentialPolicy(Path.cwd()).redact(text)

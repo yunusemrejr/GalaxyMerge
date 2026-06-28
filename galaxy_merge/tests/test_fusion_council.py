@@ -448,6 +448,7 @@ class TestMockProviderCalled:
 
         registry = ProviderRegistry(config_dir)
         registry.load()
+        assert registry.get("mock").__class__.__module__ == "galaxy_merge.providers.mock"
 
         fusion_config = {
             "max_parallel_calls": 4, "timeout_seconds": 30,

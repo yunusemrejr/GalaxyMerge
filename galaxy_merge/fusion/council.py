@@ -7,18 +7,27 @@ from typing import Any
 from galaxy_merge.providers.registry import ProviderRegistry
 from galaxy_merge.fusion.schemas import ROLE_SCHEMAS
 from galaxy_merge.fusion.synthesizer import repair_malformed
+from galaxy_merge.safety.credential_policy import redact_text
 
 logger = logging.getLogger("galaxy_merge.fusion.council")
 
 
 class Council:
-    def __init__(self, providers: ProviderRegistry, config: dict[str, Any], goal: str, event_log=None):
+    def __init__(
+        self,
+        providers: ProviderRegistry,
+        config: dict[str, Any],
+        goal: str,
+        event_log=None,
+        session_id: str = "",
+    ):
         self.providers = providers
         self.config = config
         self.goal = goal
         self.max_parallel = config.get("max_parallel_calls", 4)
         self.timeout = config.get("timeout_seconds", 180)
         self.event_log = event_log
+        self.session_id = session_id
         self._results: dict[str, list[dict[str, Any]]] = {}
         # Track degraded state per role
         self._degraded_roles: list[str] = []
@@ -75,6 +84,7 @@ class Council:
                 if self.event_log:
                     self.event_log.emit(
                         "council_quorum_failed",
+                        session_id=self.session_id,
                         succeeded=len(successful_roles),
                         required=quorum,
                     )
@@ -129,6 +139,17 @@ class Council:
             messages = stable_prefix + dynamic_sections
 
             per_role_timeout = self.config.get("per_role_timeout", self.timeout)
+            if self.event_log:
+                self.event_log.emit(
+                    "provider_called",
+                    session_id=self.session_id,
+                    role=role_name,
+                    provider_id=provider_id,
+                    provider=provider_id,
+                    model=model,
+                    attempt=attempt + 1,
+                    timeout_seconds=per_role_timeout,
+                )
             try:
                 result = await asyncio.wait_for(
                     provider.chat_completion(messages, model, temperature=0.3),
@@ -188,6 +209,8 @@ class Council:
                     error=error_msg,
                     attempt=attempt + 1,
                     duration_ms=self._elapsed_ms(start),
+                    retry_count=max_retries,
+                    fallback_decision="pending" if attempt + 1 < max_retries else "exhausted",
                 )
 
                 next_best = self._find_fallback(role_name, provider_id, cost_policy)
@@ -218,11 +241,13 @@ class Council:
                     if self.event_log:
                         self.event_log.emit(
                             "role_fallback",
+                            session_id=self.session_id,
                             role=role_name,
                             from_provider=failed_provider,
                             to_provider=provider_id,
                             model=model,
                             fallback_decision="selected",
+                            retry_count=self.config.get("retry_count", 3),
                         )
                     return (provider_id, model, model_config)
         return None
@@ -238,20 +263,23 @@ class Council:
     ):
         if role not in self._degraded_roles:
             self._degraded_roles.append(role)
+        redacted_error = redact_text(error)
         if self.event_log:
             self.event_log.emit(
                 "role_execution_failed",
+                session_id=self.session_id,
                 role=role,
                 provider_id=provider_id,
+                provider=provider_id,
                 model=model,
-                error=error,
-                error_type=self._classify_error(error),
+                error=redacted_error,
+                error_type=self._classify_error(redacted_error),
                 duration_ms=self._elapsed_ms(start),
                 attempt=attempt,
                 retry_count=self.config.get("retry_count", 3),
                 fallback_decision="pending" if attempt < self.config.get("retry_count", 3) else "exhausted",
             )
-        logger.warning("Role %s on provider %s failed (attempt %d): %s", role, provider_id, attempt, error)
+        logger.warning("Role %s on provider %s failed (attempt %d): %s", role, provider_id, attempt, redacted_error)
 
     def _elapsed_ms(self, start: float) -> int:
         return int((time.monotonic() - start) * 1000)

@@ -165,6 +165,9 @@
         unavailable.slice(0, 3).forEach(p => addChat('error', `${p.provider_id}: ${p.warning || 'unavailable'}`));
       }
       ToolsPanel.render(data.tools || []);
+      if (window.CouncilPanel) {
+        CouncilPanel.render(data.roles || []);
+      }
     } catch (e) {
       document.getElementById('bar-providers').textContent = 'Providers: unavailable';
     }

@@ -39,7 +39,7 @@ class Orchestrator:
         self.safety = SafetyGovernor(session.workroot, session.gm_dir, self.safety_audit)
         self.sandbox = Sandbox(session.workroot)
         self.tool_kernel = ToolKernel(self.safety, self.event_log)
-        self.providers = ProviderRegistry(config_dir)
+        self.providers = ProviderRegistry(config_dir, event_log=self.event_log, session_id=session.session_id)
         self.fusion_router = FusionRouter(self.providers, config_dir)
         self.synthesizer = Synthesizer()
         self.fusion_config: dict[str, Any] = {}
@@ -141,7 +141,12 @@ class Orchestrator:
             self.tool_kernel.register(schema, handler)
 
         from galaxy_merge.tools.council_tools import make_council_tools
-        for schema, handler in make_council_tools(self.providers, self.fusion_config):
+        for schema, handler in make_council_tools(
+            self.providers,
+            self.fusion_config,
+            event_log=self.event_log,
+            session_id=self.session.session_id,
+        ):
             self.tool_kernel.register(schema, handler)
 
         from galaxy_merge.tools.completion_tools import make_completion_tools
@@ -175,7 +180,12 @@ class Orchestrator:
             self.event_log.emit("skill_selected", session_id=self.session.session_id, skills=[s["name"] for s in matched_skills[:3]])
 
         self.event_log.emit("council_started", session_id=self.session.session_id, task_type=parsed.get("task_type", ""))
-        council = self.fusion_router.create_council(parsed.get("task_type", "small_edit"), goal, event_log=self.event_log)
+        council = self.fusion_router.create_council(
+            parsed.get("task_type", "small_edit"),
+            goal,
+            event_log=self.event_log,
+            session_id=self.session.session_id,
+        )
         council_results = await council.execute()
         self.event_log.emit("council_completed", session_id=self.session.session_id, roles=list(council_results.keys()))
 

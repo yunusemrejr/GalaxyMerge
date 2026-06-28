@@ -98,6 +98,99 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
     }
 
 
+def _redact_nested(value: Any, policy: CredentialPolicy) -> Any:
+    if isinstance(value, str):
+        return policy.redact(value)
+    if isinstance(value, list):
+        return [_redact_nested(item, policy) for item in value]
+    if isinstance(value, dict):
+        return {key: _redact_nested(item, policy) for key, item in value.items()}
+    return value
+
+
+def build_council_event_summary(events: list[dict[str, Any]], workroot: Path, limit: int = 200) -> dict[str, Any]:
+    policy = CredentialPolicy(workroot)
+    recent = events[-max(1, min(limit, 1000)):]
+    rows_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
+    provider_failures: list[dict[str, Any]] = []
+    fallback_events: list[dict[str, Any]] = []
+
+    for raw_event in recent:
+        event = _redact_nested(raw_event, policy)
+        event_name = event.get("event", "")
+        role = event.get("role", "")
+        provider_id = event.get("provider_id") or event.get("provider") or event.get("to_provider", "")
+        model = event.get("model", "")
+        key = (role, provider_id, model)
+
+        if event_name == "provider_called":
+            rows_by_key[key] = {
+                "role": role,
+                "provider": provider_id,
+                "provider_id": provider_id,
+                "model": model,
+                "status": "called",
+                "attempt": event.get("attempt"),
+                "time": event.get("time"),
+            }
+        elif event_name == "role_execution_failed":
+            rows_by_key[key] = {
+                "role": role,
+                "provider": provider_id,
+                "provider_id": provider_id,
+                "model": model,
+                "status": "degraded",
+                "error": event.get("error", ""),
+                "error_type": event.get("error_type", ""),
+                "attempt": event.get("attempt"),
+                "retry_count": event.get("retry_count"),
+                "fallback_decision": event.get("fallback_decision", ""),
+                "duration_ms": event.get("duration_ms"),
+                "time": event.get("time"),
+            }
+        elif event_name == "provider_failed":
+            failure = {
+                "role": role,
+                "provider": provider_id,
+                "provider_id": provider_id,
+                "model": model,
+                "status": "failed",
+                "error": event.get("error", ""),
+                "error_type": event.get("error_type", ""),
+                "attempt": event.get("attempt"),
+                "retry_count": event.get("retry_count"),
+                "fallback_decision": event.get("fallback_decision", ""),
+                "duration_ms": event.get("duration_ms"),
+                "time": event.get("time"),
+            }
+            provider_failures.append(failure)
+            rows_by_key[key] = failure
+        elif event_name == "role_fallback":
+            fallback = {
+                "role": role,
+                "from_provider": event.get("from_provider", ""),
+                "to_provider": event.get("to_provider", ""),
+                "provider": event.get("to_provider", ""),
+                "model": model,
+                "status": "fallback",
+                "fallback_decision": event.get("fallback_decision", ""),
+                "retry_count": event.get("retry_count"),
+                "time": event.get("time"),
+            }
+            fallback_events.append(fallback)
+
+    return {
+        "roles": list(rows_by_key.values()),
+        "degraded_roles": sorted({
+            row.get("role", "")
+            for row in rows_by_key.values()
+            if row.get("role") and row.get("status") in {"degraded", "failed"}
+        }),
+        "provider_failures": provider_failures,
+        "fallback_events": fallback_events,
+    }
+
+
 class SessionServer:
     def __init__(self, session: Session, port: int = 0, strict_socket: bool = False):
         self.session = session
@@ -213,12 +306,20 @@ class SessionServer:
         @app.get("/api/council")
         def get_council():
             if self._orchestrator:
+                policy = CredentialPolicy(self.session.workroot)
+                summary = build_council_event_summary(
+                    self.session.event_log.replay(),
+                    self.session.workroot,
+                )
+                providers = _redact_nested(self._orchestrator.providers.available_providers(), policy)
+                warnings = _redact_nested(self._orchestrator.providers.load_errors(), policy)
                 return {
                     "tools": self._orchestrator.tool_kernel.list_tools(),
-                    "providers": self._orchestrator.providers.available_providers(),
-                    "warnings": self._orchestrator.providers.load_errors(),
+                    "providers": providers,
+                    "warnings": warnings,
+                    **summary,
                 }
-            return {"tools": [], "providers": []}
+            return {"tools": [], "providers": [], "roles": [], "degraded_roles": []}
 
         @app.get("/api/tools")
         def get_tools():
