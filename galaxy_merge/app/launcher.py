@@ -7,7 +7,7 @@ from pathlib import Path
 from galaxy_merge.app.server import start_server
 from galaxy_merge.app.browser import open_browser
 from galaxy_merge.app.lifecycle import print_boot_log
-from galaxy_merge.core.session import detect_workroot, init_gm_dir, Session
+from galaxy_merge.core.session import detect_workroot, init_gm_dir, Session, validate_gm_structure
 from galaxy_merge.core.config import load_app_config
 from galaxy_merge.core.concurrency import (
     cleanup_stale_sessions,
@@ -98,6 +98,16 @@ class Launcher:
         init_gm_dir(workroot)
         upgrade_concurrency(workroot / ".gm")
         cleanup_stale_sessions(workroot / ".gm")
+
+        gm_validation = validate_gm_structure(workroot / ".gm")
+        if not gm_validation["ok"]:
+            print("", file=sys.stderr)
+            print(f"WARNING: .gm/ structure validation found {len(gm_validation['warnings'])} issue(s):", file=sys.stderr)
+            for w in gm_validation["warnings"][:8]:
+                print(f"  - {w}", file=sys.stderr)
+            if len(gm_validation["warnings"]) > 8:
+                print(f"  ... and {len(gm_validation['warnings']) - 8} more (see .gm/ logs)", file=sys.stderr)
+            print("", file=sys.stderr)
 
         session_id = self.resume_session_id
         self.session = Session(workroot, session_id=session_id)

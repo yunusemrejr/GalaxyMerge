@@ -473,3 +473,24 @@ def _validate_gm_structure(gm: Path) -> list[str]:
             logging.warning(f"gm structure: {w}")
 
     return warnings
+
+
+def validate_gm_structure(gm: Path) -> dict[str, Any]:
+    """Public .gm/ structure validation.
+
+    Returns a dict with ``ok`` (bool) and ``warnings`` (list[str]).
+    Safe to call on a partially-created or empty ``.gm`` directory; never
+    raises. Use this from boot, the health endpoint, or tests.
+    """
+    result: dict[str, Any] = {"ok": True, "warnings": [], "checked_at": None}
+    if not gm.exists():
+        result["ok"] = False
+        result["warnings"].append(f".gm directory missing: {gm}")
+        return result
+    warnings = _validate_gm_structure(gm)
+    if warnings:
+        result["ok"] = False
+        result["warnings"].extend(warnings)
+    from datetime import datetime, timezone
+    result["checked_at"] = datetime.now(timezone.utc).isoformat()
+    return result

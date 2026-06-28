@@ -380,6 +380,56 @@ class SessionServer:
                     return {"success": result.success, "data": result.data, "error": result.error}
             return JSONResponse(content={"error": "secret scan tool not available"}, status_code=500)
 
+        # --- Health ---
+        @app.get("/api/health")
+        def get_health():
+            from galaxy_merge.core.session import validate_gm_structure
+
+            gm_validation = validate_gm_structure(self.session.gm_dir)
+
+            tools_count = 0
+            providers_loaded = 0
+            providers_available = 0
+            if self._orchestrator is not None:
+                try:
+                    tools_count = len(self._orchestrator.tool_kernel.list_tools())
+                except Exception:
+                    tools_count = 0
+                try:
+                    providers = self._orchestrator.providers.available_providers()
+                    providers_loaded = len(providers)
+                    providers_available = sum(
+                        1 for p in providers if p.get("available", True)
+                    )
+                except Exception:
+                    providers_loaded = 0
+                    providers_available = 0
+
+            events_log = self.session.gm_dir / "sessions" / self.session.session_id / "events.jsonl"
+            recent_events = 0
+            try:
+                if events_log.exists():
+                    with events_log.open("r", encoding="utf-8") as fp:
+                        for _ in fp:
+                            recent_events += 1
+            except OSError:
+                pass
+
+            ok = bool(gm_validation.get("ok")) and self.session is not None
+            return {
+                "ok": ok,
+                "session_id": self.session.session_id,
+                "workroot": str(self.session.workroot),
+                "gm_dir": str(self.session.gm_dir),
+                "gm_validation": gm_validation,
+                "tools_count": tools_count,
+                "providers_loaded": providers_loaded,
+                "providers_available": providers_available,
+                "session_status": self.session._state.get("status", "unknown"),
+                "events_recorded": recent_events,
+                "checked_at": datetime.now(timezone.utc).isoformat(),
+            }
+
         # --- WebSocket ---
         @app.websocket("/ws/session/{session_id}")
         async def websocket_endpoint(ws: WebSocket, session_id: str, since: int | None = 0):

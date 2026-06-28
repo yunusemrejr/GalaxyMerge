@@ -1,10 +1,14 @@
 """
 Validate that .gm/ project folder matches the full spec structure.
 """
+
 import json
 from pathlib import Path
 from unittest.mock import patch
 import pytest
+
+pytestmark = [pytest.mark.unit]
+
 
 from galaxy_merge.core.session import init_gm_dir, detect_workroot, _validate_project_json
 
