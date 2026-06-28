@@ -105,16 +105,17 @@ def cleanup_stale_sessions(
                 hb_time = float(content)
             else:
                 hb_time = hb_file.stat().st_mtime
+        except (OSError, ValueError):
+            continue
         if now - hb_time > max_age:
             session_id = hb_file.stem
             session_dir = gm_dir / "sessions" / session_id
             if session_dir.exists():
                 import shutil
-                    shutil.rmtree(session_dir, ignore_errors=True)
-                hb_file.unlink(missing_ok=True)
-                stale.append(session_id)
-        except (OSError, ValueError):
-            pass
+
+                shutil.rmtree(session_dir, ignore_errors=True)
+            hb_file.unlink(missing_ok=True)
+            stale.append(session_id)
 
     if stale:
         registry_path = gm_dir / "sessions" / "registry.jsonl"

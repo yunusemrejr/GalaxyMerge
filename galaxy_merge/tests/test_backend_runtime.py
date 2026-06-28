@@ -607,7 +607,6 @@ class TestSafetyBoundary:
             redacted = policy.redact("token: ghp_123456789012345678901234567890123456")
             assert "123456789012345678901234567890123456" not in redacted
             assert "REDACTED" in redacted
-            assert "ghp_1234" in redacted
 
 
 # =============================================================================

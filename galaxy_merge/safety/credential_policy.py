@@ -136,7 +136,7 @@ class CredentialPolicy:
 
     def redact(self, text: str) -> str:
         for pattern in SENSITIVE_PATTERNS:
-            text = re.sub(pattern, lambda m: m.group(0)[:8] + "***REDACTED***", text, flags=re.IGNORECASE)
+            text = re.sub(pattern, "[REDACTED]", text, flags=re.IGNORECASE)
 
         def redact_env_var(m: re.Match) -> str:
             full = m.group(0)

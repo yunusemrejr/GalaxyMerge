@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import contextmanager
 import socket
 import tempfile
 from pathlib import Path
@@ -60,7 +61,8 @@ def _write_offline_registry(payload: dict[str, Any]) -> None:
     _OFFLINE_PORTS_FILE.write_text(json.dumps(payload, sort_keys=True))
 
 
-def _with_offline_lock() -> None:
+@contextmanager
+def _with_offline_lock() -> Any:
     if fcntl is None:
         return
     _OFFLINE_LOCK_FILE.parent.mkdir(parents=True, exist_ok=True)
