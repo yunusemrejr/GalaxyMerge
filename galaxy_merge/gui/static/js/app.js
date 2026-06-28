@@ -8,7 +8,7 @@
       return;
     }
 
-    updateTopBar();
+    await updateTopBar();
     FilesPanel.refresh();
     NotesPanel.refresh();
     MemoryPanel.refresh();
@@ -51,12 +51,67 @@
     refreshAll();
   }
 
-  function updateTopBar() {
-    if (GM.session) {
-      document.getElementById('bar-session').textContent = `Session: ${GM.session.session_id.slice(0, 20)}...`;
+  async function updateTopBar() {
+    const project = GM.project || {};
+    const session = GM.session || {};
+    const projectEl = document.getElementById('bar-project');
+    if (projectEl) {
+      projectEl.textContent = `Project: ${project.name || project.workroot || '--'}`;
     }
-    if (GM.project) {
-      document.getElementById('bar-project').textContent = `Project: ${GM.project.name || GM.project.workroot || '--'}`;
+    const workrootEl = document.getElementById('bar-workroot');
+    if (workrootEl) {
+      const wr = project.workroot || session.workroot || '';
+      workrootEl.textContent = `WorkRoot: ${wr ? wr.split('/').pop() : '--'}`;
+      if (wr) workrootEl.title = wr;
+    }
+    const taskscopeEl = document.getElementById('bar-taskscope');
+    if (taskscopeEl) {
+      try {
+        const locs = await API.getLocations();
+        const raw = locs.taskscope;
+        const ts = Array.isArray(raw) ? (raw[0] || '') : (raw || '');
+        taskscopeEl.textContent = `TaskScope: ${ts ? ts.split('/').pop() : '--'}`;
+        if (ts) taskscopeEl.title = ts;
+      } catch (e) {
+        taskscopeEl.textContent = 'TaskScope: --';
+      }
+    }
+    const goalEl = document.getElementById('bar-goal');
+    if (goalEl) {
+      const goal = session.goal || '';
+      const phase = session.status || session.goal_state || 'idle';
+      goalEl.textContent = `Goal: ${goal ? (goal.slice(0, 24) + (goal.length > 24 ? '...' : '')) : phase}`;
+      if (goal) goalEl.title = goal;
+    }
+    await populateSessionPicker();
+  }
+
+  async function populateSessionPicker() {
+    const picker = document.getElementById('session-picker');
+    if (!picker) return;
+    try {
+      const data = await API.getSessions();
+      const sessions = data.sessions || [];
+      const current = data.current_session_id || (GM.session && GM.session.session_id);
+      picker.innerHTML = '';
+      if (!sessions.length) {
+        const opt = document.createElement('option');
+        opt.value = current || '';
+        opt.textContent = current ? current.slice(0, 12) : '--';
+        opt.disabled = true;
+        picker.appendChild(opt);
+        return;
+      }
+      for (const s of sessions) {
+        const opt = document.createElement('option');
+        opt.value = s.session_id;
+        const label = `${s.session_id.slice(0, 12)}${s.active ? '' : ' (inactive)'}`;
+        opt.textContent = label;
+        if (s.session_id === current) opt.selected = true;
+        picker.appendChild(opt);
+      }
+    } catch (e) {
+      console.error('session picker failed', e);
     }
   }
 
@@ -66,10 +121,10 @@
   function connectWebSocket(url) {
     try {
       GM.ws = new WebSocket(url);
-      document.getElementById('bar-safety').textContent = 'Backend: connecting';
+      setConnectionState('connecting');
       GM.ws.onopen = () => {
         wsReconnectDelay = 1000;
-        document.getElementById('bar-safety').textContent = GM.project && GM.project.readonly_mode ? 'Safety: read-only' : 'Safety: enabled';
+        setConnectionState('connected');
       };
       GM.ws.onmessage = (event) => {
         try {
@@ -80,12 +135,12 @@
         }
       };
       GM.ws.onclose = () => {
-        document.getElementById('bar-safety').textContent = 'Backend: reconnecting';
+        setConnectionState('reconnecting');
         setTimeout(() => connectWebSocket(url), wsReconnectDelay);
         wsReconnectDelay = Math.min(wsReconnectDelay * 2, wsMaxReconnectDelay);
       };
       GM.ws.onerror = () => {
-        document.getElementById('bar-safety').textContent = 'Backend: degraded';
+        setConnectionState('degraded');
       };
     } catch (e) {
       console.error('ws connection failed', e);
@@ -260,6 +315,19 @@
     if (btn) btn.classList.add('active');
     const panel = document.getElementById(subTabId);
     if (panel) panel.classList.add('active');
+  }
+
+  function setConnectionState(state) {
+    const el = document.getElementById('bar-connection');
+    if (!el) return;
+    const labels = {
+      connecting: 'Backend: connecting',
+      connected: 'Backend: online',
+      reconnecting: 'Backend: reconnecting',
+      degraded: 'Backend: degraded',
+    };
+    el.textContent = labels[state] || `Backend: ${state}`;
+    el.style.color = state === 'connected' ? 'var(--accent2)' : state === 'degraded' || state === 'reconnecting' ? 'var(--yellow)' : 'var(--fg2)';
   }
 
   function escapeHtml(text) {

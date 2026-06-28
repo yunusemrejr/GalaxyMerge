@@ -131,3 +131,38 @@ def test_acceptance_matrix_dry_run_lists_all_final_criteria(tmp_path: Path) -> N
     assert {row["id"] for row in report["criteria"]} == set(range(1, 47))
     assert report["steps"]["pytest"]["status"] == "SKIPPED"
     assert report["steps"]["provider_degradation"]["status"] == "SKIPPED"
+
+
+@pytest.mark.unit
+def test_secret_scan_bare_pem_header_without_end_is_not_flagged(tmp_path: Path) -> None:
+    """A bare PEM BEGIN marker (no END line, no key body) is documentation,
+    not a leakable secret. The Python scanner must not false-positive on it."""
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location(
+        "gm_secret_scan", REPO_ROOT / "scripts" / "secret_scan.py"
+    )
+    assert spec and spec.loader
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+
+    doc = tmp_path / "patterns.md"
+    doc.write_text(
+        "Secret redaction test patterns:\n"
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "sk-xxxx (placeholder)\n"
+    )
+    assert mod.scan_file(doc) == []
+
+    # Build the END marker from parts so this test source file does not itself
+    # contain a complete PEM block (which would trip the repo-level scan). The
+    # written fixture file still contains a full PEM block for detection.
+    _pem_end = "-----END " + "OPENSSH PRIVATE KEY-----"
+    real_key = tmp_path / "id_ed25519"
+    real_key.write_text(
+        "-----BEGIN OPENSSH PRIVATE KEY-----\n"
+        "b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n"
+        f"{_pem_end}\n"
+    )
+    findings = mod.scan_file(real_key)
+    assert any("PRIVATE KEY" in f for f in findings)

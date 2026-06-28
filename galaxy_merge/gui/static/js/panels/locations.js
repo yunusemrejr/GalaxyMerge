@@ -22,9 +22,10 @@
         }
         
         if (data.taskscope) {
+          const ts = Array.isArray(data.taskscope) ? data.taskscope.join(', ') : data.taskscope;
           html += `<div class="location-card">
             <div class="loc-target">TaskScope</div>
-            <div style="font-size:10px;color:var(--fg2)">${escapeHtml(data.taskscope)}</div>
+            <div style="font-size:10px;color:var(--fg2)">${escapeHtml(ts)}</div>
           </div>`;
         }
         

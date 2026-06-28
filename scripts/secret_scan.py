@@ -12,6 +12,9 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
+PEM_BEGIN_RE = re.compile(r'-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----')
+PEM_END_RE = re.compile(r'-----END (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----')
+
 SECRET_PATTERNS = [
     re.compile(r'sk-(?:proj-)?[A-Za-z0-9_-]{40,}'),
     re.compile(r'ghp_[A-Za-z0-9_]{36,}'),
@@ -19,7 +22,7 @@ SECRET_PATTERNS = [
     re.compile(r'gho_[A-Za-z0-9_]{36,}'),
     re.compile(r'AKIA[0-9A-Z]{16}'),
     re.compile(r'AIza[0-9A-Za-z_-]{30,}'),
-    re.compile(r'-----BEGIN (?:RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----'),
+    PEM_BEGIN_RE,
     re.compile(r'xox[baprs]-[A-Za-z0-9-]{40,}'),
     re.compile(r'npm_[A-Za-z0-9]{30,}'),
     re.compile(r'eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}'),
@@ -48,6 +51,8 @@ def is_placeholder(line: str) -> bool:
     return any(p.search(line) for p in PLACEHOLDER_PATTERNS)
 
 
+
+
 def scan_file(path: Path) -> list[str]:
     findings = []
     try:
@@ -55,10 +60,20 @@ def scan_file(path: Path) -> list[str]:
     except (OSError, UnicodeDecodeError):
         return findings
 
-    for line_num, line in enumerate(content.splitlines(), 1):
+    lines = content.splitlines()
+    has_pem_end = any(PEM_END_RE.search(line) for line in lines)
+
+    for line_num, line in enumerate(lines, 1):
         for pattern in SECRET_PATTERNS:
-            if pattern.search(line) and not is_placeholder(line):
-                findings.append(f"  {path}:{line_num}: {line.strip()[:120]}")
+            if not pattern.search(line):
+                continue
+            if is_placeholder(line):
+                continue
+            # A bare PEM BEGIN header without a matching END marker is not a
+            # leakable secret (real private keys always have an END line).
+            if pattern is PEM_BEGIN_RE and not has_pem_end:
+                continue
+            findings.append(f"  {path}:{line_num}: {line.strip()[:120]}")
     return findings
 
 

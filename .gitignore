@@ -8,6 +8,8 @@ build/
 .opencode/
 .pi/
 .codex/
+.omo/
+.codegraph
 *.log
 .env
 .env.*
