@@ -14,6 +14,10 @@ class OpenAICompatibleProvider(ProviderBase):
         auth_config = config.get("auth", {})
         self.api_key = self._resolve_api_key(auth_config)
         self.timeout = config.get("timeout_seconds", 90)
+        # Cache behavior from model config
+        self.supports_prefix_cache = config.get("cache_behavior", {}).get(
+            "supports_prefix_cache", False
+        )
         if auth_config.get("type") == "env" and not self.api_key:
             env_var = auth_config.get("env_var", "")
             self._healthy = False
@@ -33,6 +37,7 @@ class OpenAICompatibleProvider(ProviderBase):
         temperature: float = 0.7,
         max_tokens: int | None = None,
         stream: bool = False,
+        extra_body: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         if not self.available:
             return {"success": False, "error": self.warning or "provider unavailable"}
@@ -49,6 +54,10 @@ class OpenAICompatibleProvider(ProviderBase):
         if max_tokens:
             body["max_tokens"] = max_tokens
 
+        # Provider-specific cache optimization
+        if self.supports_prefix_cache and extra_body:
+            body.update(extra_body)
+
         async with httpx.AsyncClient(timeout=self.timeout) as client:
             try:
                 response = await client.post(
@@ -63,17 +72,44 @@ class OpenAICompatibleProvider(ProviderBase):
                 if data.get("choices"):
                     content = data["choices"][0].get("message", {}).get("content", "")
 
+                usage = data.get("usage", {})
+                # Extract DeepSeek-style cache telemetry if present
+                cache_hit_tokens = (
+                    usage.get("prompt_tokens_details", {}).get("cached_tokens", 0)
+                    or usage.get("prompt_cache_hit_tokens", 0)
+                    or 0
+                )
+                cache_miss_tokens = (
+                    (usage.get("prompt_tokens", 0) - cache_hit_tokens)
+                    if usage.get("prompt_tokens")
+                    else usage.get("prompt_cache_miss_tokens", 0)
+                )
+
                 return {
                     "success": True,
                     "content": content,
                     "model": data.get("model", model),
-                    "usage": data.get("usage", {}),
+                    "usage": {
+                        "prompt_tokens": usage.get("prompt_tokens", 0),
+                        "completion_tokens": usage.get("completion_tokens", 0),
+                        "total_tokens": usage.get("total_tokens", 0),
+                        "cache_hit_tokens": cache_hit_tokens,
+                        "cache_miss_tokens": cache_miss_tokens,
+                    },
                     "provider": self.provider_id,
+                    "cache_hit_tokens": cache_hit_tokens,
+                    "cache_miss_tokens": cache_miss_tokens,
+                    "supports_prefix_cache": self.supports_prefix_cache,
                 }
             except httpx.TimeoutException:
                 return {"success": False, "error": "request timed out"}
             except httpx.HTTPStatusError as e:
-                return {"success": False, "error": redact_text(f"HTTP {e.response.status_code}: {e.response.text}")}
+                return {
+                    "success": False,
+                    "error": redact_text(
+                        f"HTTP {e.response.status_code}: {e.response.text}"
+                    ),
+                }
             except Exception as e:
                 return {"success": False, "error": redact_text(str(e))}
 

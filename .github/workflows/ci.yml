@@ -24,6 +24,13 @@ jobs:
       - name: Install dependencies
         run: uv sync
 
+      - name: Check GUI JS syntax
+        run: |
+          for f in galaxy_merge/gui/static/js/*.js galaxy_merge/gui/static/js/panels/*.js; do
+            node --check "$f" || exit 1
+          done
+          echo "All GUI JS files have valid syntax"
+
       - name: Run unit tests
         run: uv run pytest galaxy_merge/tests/ -v --tb=short -x --ignore=galaxy_merge/tests/test_backend_runtime.py --ignore=galaxy_merge/tests/test_redteam_v3_comprehensive.py --ignore=galaxy_merge/tests/test_redteam_provider_reliability.py --ignore=galaxy_merge/tests/test_concurrency.py --ignore=galaxy_merge/tests/test_fusion_council.py
 
