@@ -97,10 +97,15 @@ def run_doctor() -> int:
 
     # --- Required packages ---
     print("--- Required Packages ---")
+    _IMPORT_NAMES = {
+        "pyyaml": "yaml",
+        "beautifulsoup4": "bs4",
+    }
     required = ["fastapi", "uvicorn", "pydantic", "httpx", "websockets", "pyyaml", "requests"]
     for pkg in required:
         try:
-            mod = __import__(pkg)
+            import_name = _IMPORT_NAMES.get(pkg, pkg)
+            mod = __import__(import_name)
             ver = getattr(mod, '__version__', '?')
             _check(pkg, True, ver)
         except ImportError:
@@ -114,7 +119,8 @@ def run_doctor() -> int:
     optional = ["beautifulsoup4", "lxml"]
     for pkg in optional:
         try:
-            mod = __import__(pkg.replace("-", "_"))
+            import_name = _IMPORT_NAMES.get(pkg, pkg)
+            mod = __import__(import_name)
             ver = getattr(mod, '__version__', '?')
             _check(pkg, True, ver)
         except ImportError:
