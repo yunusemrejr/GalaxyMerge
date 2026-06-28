@@ -4,8 +4,9 @@ import time
 from pathlib import Path
 from typing import Any
 
-from galaxy_merge.browser.cdp import CDPMonitor
+from galaxy_merge.browser.cdp import CDPCommandError, CDPMonitor, send_page_command
 from galaxy_merge.browser.console_logs import ConsoleLogCollector
+from galaxy_merge.browser.page_errors import PageErrorCollector
 from galaxy_merge.browser.network_logs import NetworkLogCollector
 from galaxy_merge.browser.screenshots import ScreenshotManager
 from galaxy_merge.browser.dom import DOMInspector
@@ -13,11 +14,13 @@ from galaxy_merge.browser.dom import DOMInspector
 
 class BrowserManager:
     def __init__(self, cache_dir: Path):
+        self.gm_dir = cache_dir
         self.cache_dir = cache_dir / "browser"
         self.cache_dir.mkdir(parents=True, exist_ok=True)
         self._sessions: dict[str, dict[str, Any]] = {}
         self._console_collectors: dict[str, ConsoleLogCollector] = {}
         self._network_collectors: dict[str, NetworkLogCollector] = {}
+        self._page_error_collectors: dict[str, PageErrorCollector] = {}
         self._cdp_monitors: dict[str, CDPMonitor] = {}
         self._screenshot_mgr = ScreenshotManager(cache_dir)
         self._dom_inspector = DOMInspector()
@@ -72,12 +75,14 @@ class BrowserManager:
                 "url": url,
                 "started_at": time.time(),
             }
-            console = ConsoleLogCollector(session_id, self.cache_dir)
-            network = NetworkLogCollector(self.cache_dir, session_id)
+            console = ConsoleLogCollector(session_id, self.gm_dir)
+            network = NetworkLogCollector(self.gm_dir, session_id)
+            page_errors = PageErrorCollector(self.gm_dir, session_id)
             self._console_collectors[session_id] = console
             self._network_collectors[session_id] = network
+            self._page_error_collectors[session_id] = page_errors
             if debug_port:
-                monitor = CDPMonitor(debug_port, console, network)
+                monitor = CDPMonitor(debug_port, console, network, page_errors)
                 self._cdp_monitors[session_id] = monitor
                 monitor.start()
             else:
@@ -100,6 +105,9 @@ class BrowserManager:
             monitor = self._cdp_monitors.pop(session_id, None)
             if monitor:
                 monitor.stop()
+            self._console_collectors.pop(session_id, None)
+            self._network_collectors.pop(session_id, None)
+            self._page_error_collectors.pop(session_id, None)
             proc = session.get("process")
             if proc and proc.poll() is None:
                 proc.terminate()
@@ -131,11 +139,71 @@ class BrowserManager:
             return []
         return collector.get_logs()
 
+    def page_errors_read(self, session_id: str) -> list[dict[str, Any]]:
+        collector = self._page_error_collectors.get(session_id)
+        if not collector:
+            return []
+        return collector.get_errors()
+
     def inspect_page(self, session_id: str, selector: str = "body") -> dict[str, Any]:
         session = self._sessions.get(session_id)
         if not session:
             return {"error": "session not found"}
+        live = self.dom_snapshot(session_id, selector)
+        if live.get("success"):
+            return live
         return self._dom_inspector.inspect_page_structure(session, selector)
+
+    def _debug_port(self, session_id: str) -> int:
+        session = self._sessions.get(session_id)
+        if not session:
+            return 0
+        return int(session.get("debug_port", 0) or 0)
+
+    def _run_page_command(self, session_id: str, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+        port = self._debug_port(session_id)
+        if not port:
+            return {"success": False, "error": "DevTools capture not available"}
+        try:
+            response = send_page_command(port, method, params)
+            return {"success": True, "response": response}
+        except CDPCommandError as e:
+            return {"success": False, "error": str(e)}
+
+    def navigate(self, session_id: str, url: str) -> dict[str, Any]:
+        if session_id not in self._sessions:
+            return {"success": False, "error": "session not found"}
+        result = self._run_page_command(session_id, "Page.navigate", {"url": url})
+        if result.get("success"):
+            self._sessions[session_id]["url"] = url
+            result["url"] = url
+        return result
+
+    def reload(self, session_id: str) -> dict[str, Any]:
+        if session_id not in self._sessions:
+            return {"success": False, "error": "session not found"}
+        return self._run_page_command(session_id, "Page.reload")
+
+    def dom_snapshot(self, session_id: str, selector: str = "body") -> dict[str, Any]:
+        if session_id not in self._sessions:
+            return {"success": False, "error": "session not found"}
+        result = self._run_page_command(session_id, "Runtime.evaluate", {
+            "expression": "document.documentElement.outerHTML",
+            "returnByValue": True,
+        })
+        if not result.get("success"):
+            return result
+        response = result.get("response", {})
+        html = response.get("result", {}).get("result", {}).get("value", "")
+        if not html:
+            return {"success": False, "error": "DOM snapshot unavailable"}
+        return {
+            "success": True,
+            "session_id": session_id,
+            "selector": selector,
+            "snapshot": self._dom_inspector.inspect(html, selector),
+            "html_preview": html[:1000],
+        }
 
     def screenshot(self, session_id: str) -> dict[str, Any]:
         session = self._sessions.get(session_id)
