@@ -112,22 +112,46 @@ def detect_workroot(path: Path) -> Path | None:
         Path("/opt"),
         Path("/root"),
     ]
+    blocked_tree_prefixes = [
+        "/usr",
+        "/bin",
+        "/sbin",
+        "/etc",
+        "/var",
+        "/opt",
+        "/boot",
+        "/dev",
+        "/proc",
+        "/sys",
+        "/run",
+        "/root",
+    ]
+
+    def _is_forbidden_root(candidate: Path) -> bool:
+        for forbidden in forbidden_prefixes:
+            if candidate == forbidden:
+                return True
+        candidate_str = str(candidate)
+        for prefix in blocked_tree_prefixes:
+            if candidate_str == prefix or candidate_str.startswith(prefix + "/"):
+                return True
+        return False
 
     current = path
     for _ in range(20):
+        if _is_forbidden_root(current):
+            return None
         for signal in signals:
             if (current / signal).exists():
-                for forbidden in forbidden_prefixes:
-                    if str(current).startswith(str(forbidden)):
-                        if current == forbidden:
-                            continue
+                if _is_forbidden_root(current):
+                    return None
                 return current
         parent = current.parent
         if parent == current:
             break
         current = parent
 
-    if path.resolve() in forbidden_prefixes:
+    if _is_forbidden_root(path):
         return None
     return path
 

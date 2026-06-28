@@ -178,6 +178,8 @@ SESSION_ID="$(curl -sf "$API_BASE/api/session" | "${GM_PYTHON[@]}" -c 'import js
 "${GM_PYTHON[@]}" - "$REPO_ROOT" "$PROJECT_DIR" "$SESSION_ID" "$API_BASE" "$EVIDENCE_DIR" <<'PY'
 import asyncio
 import json
+import os
+import shutil
 import sys
 import time
 import urllib.request
@@ -199,6 +201,7 @@ async def main() -> int:
     evidence_dir = Path(sys.argv[5])
     report_path = evidence_dir / "acceptance-report.json"
 
+    os.environ["GM_BROWSER_HEADLESS"] = "1"
     session = Session(project_dir, session_id=session_id)
     session.save_state()
     orchestrator = Orchestrator(session, project_dir / "config_templates", repo_root)
@@ -221,6 +224,38 @@ async def main() -> int:
 
     with urllib.request.urlopen(f"{api_base}/api/council", timeout=5) as response:
         api_payload = json.loads(response.read().decode("utf-8"))
+
+    gui_open = await orchestrator.tool_kernel.execute(
+        "browser.open",
+        {"url": api_base, "session_id": "provider-gui"},
+        session_id=session_id,
+    )
+    gui_dom = None
+    gui_dom_text = ""
+    for _ in range(30):
+        gui_dom = await orchestrator.tool_kernel.execute(
+            "browser.dom.snapshot",
+            {"session_id": "provider-gui", "selector": "#council-panel"},
+            session_id=session_id,
+        )
+        gui_dom_text = json.dumps(gui_dom.to_dict(), default=str)
+        if "mock_primary" in gui_dom_text and ("DEGRADED" in gui_dom_text or "FAILED" in gui_dom_text):
+            break
+        await asyncio.sleep(0.25)
+    gui_screenshot = await orchestrator.tool_kernel.execute(
+        "browser.screenshot",
+        {"session_id": "provider-gui"},
+        session_id=session_id,
+    )
+    gui_screenshot_copy = evidence_dir / "gui-provider-degradation.png"
+    screenshot_path = ((gui_screenshot.data or {}).get("screenshot_path") or "")
+    if screenshot_path:
+        shutil.copyfile(str(screenshot_path), gui_screenshot_copy)
+    await orchestrator.tool_kernel.execute(
+        "browser.close",
+        {"session_id": "provider-gui"},
+        session_id=session_id,
+    )
 
     events = session.event_log.replay()
     events_text = json.dumps(events, default=str)
@@ -257,6 +292,13 @@ async def main() -> int:
             event.get("to_provider") == "mock_fallback"
             for event in api_payload.get("fallback_events", [])
         ),
+        "gui_council_panel_failure_visible": (
+            gui_open.success
+            and gui_dom is not None
+            and "mock_primary" in gui_dom_text
+            and ("DEGRADED" in gui_dom_text or "FAILED" in gui_dom_text)
+        ),
+        "gui_screenshot_captured": gui_screenshot.success and gui_screenshot_copy.exists(),
         "raw_secret_absent_from_events": RUNTIME_NEEDLE not in events_text,
         "raw_secret_absent_from_api": RUNTIME_NEEDLE not in api_text,
     }
@@ -271,6 +313,11 @@ async def main() -> int:
         "checks": checks,
         "tool_result": result_dict,
         "api_council": api_payload,
+        "gui": {
+            "open": gui_open.to_dict(),
+            "dom": gui_dom.to_dict() if gui_dom else {},
+            "screenshot": gui_screenshot.to_dict(),
+        },
         "events": {
             "provider_called": provider_called,
             "role_execution_failed": role_failures,
@@ -281,6 +328,7 @@ async def main() -> int:
             "terminal_log": str(evidence_dir / "gm-terminal.log"),
             "report": str(report_path),
             "events": str(session.events_path),
+            "gui_screenshot": str(gui_screenshot_copy),
         },
     }
     redactor = CredentialPolicy(project_dir)

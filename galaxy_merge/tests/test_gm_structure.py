@@ -3,6 +3,7 @@ Validate that .gm/ project folder matches the full spec structure.
 """
 import json
 from pathlib import Path
+from unittest.mock import patch
 import pytest
 
 from galaxy_merge.core.session import init_gm_dir, detect_workroot, _validate_project_json
@@ -210,6 +211,42 @@ class TestSessionIsolation:
         data = json.loads((tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text())
         assert data["status"] == "crashed"
         assert data["active"] is False
+
+
+class TestWorkrootDetection:
+    def test_detect_workroot_blocks_broad_roots(self, tmp_path):
+        fake_home = tmp_path / "home" / "yemre"
+        fake_home.mkdir(parents=True)
+        blocked_dirs = [
+            fake_home,
+            fake_home / "Desktop",
+            fake_home / "Downloads",
+            Path("/"),
+            Path("/home"),
+            Path("/usr"),
+            Path("/etc"),
+            Path("/var"),
+            Path("/opt"),
+            Path("/bin"),
+            Path("/sbin"),
+            Path("/root"),
+            Path("/tmp"),  # not a hard deny in this implementation, but keep as baseline control
+        ]
+        for d in blocked_dirs:
+            if str(d).startswith("/tmp"):
+                continue
+            d.mkdir(exist_ok=True, parents=True)
+            # Seed markers so detection would otherwise short-circuit to this directory.
+            if d == fake_home:
+                (d / ".git").mkdir(exist_ok=True)
+
+        with patch("galaxy_merge.core.session.Path.home", return_value=fake_home):
+            for d in blocked_dirs:
+                result = detect_workroot(d)
+                if d == Path("/tmp"):
+                    assert result == d
+                else:
+                    assert result is None
 
 
 class TestNotesCrud:

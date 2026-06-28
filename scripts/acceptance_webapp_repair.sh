@@ -316,17 +316,27 @@ async def main() -> int:
         }],
     }
     synthesis = await tool("council.synthesize", {"council_results": council_results})
+    synthesis_output = ((synthesis.get("data") or {}).get("output") or {})
     review = await tool("council.review", {
-        "fusion_result": ((synthesis.get("data") or {}).get("output") or {}),
+        "fusion_result": synthesis_output,
     })
+
+    final_error_count = int((final_errors.get("data") or {}).get("count", 0))
+    dom_preview = str((final_dom.get("data") or {}).get("html_preview", ""))
+    post_test_data = post_test.get("data") or {}
+    completion_payload = dict(synthesis_output)
+    completion_payload["verification_evidence"] = {
+        "dom_preview": dom_preview,
+        "post_test_stdout": post_test_data.get("stdout", ""),
+        "post_test_stderr": post_test_data.get("stderr", ""),
+        "browser_error_count_after_reload": final_error_count,
+    }
     completion = await tool("completion.review", {
-        "result": ((synthesis.get("data") or {}).get("output") or {}),
+        "result": completion_payload,
         "criteria": ["src/math.js", "Answer: 42", "npm test"],
     })
     await tool("browser.close", {"session_id": "repair"})
 
-    final_error_count = int((final_errors.get("data") or {}).get("count", 0))
-    dom_preview = str((final_dom.get("data") or {}).get("html_preview", ""))
     pre_test_failed = not bool(pre_test.get("success"))
     post_test_passed = bool(post_test.get("success"))
     initial_browser_failed = before_error_count > 0
@@ -334,6 +344,7 @@ async def main() -> int:
     dom_fixed = "Answer: 42" in dom_preview
     screenshot_captured = bool(after_screenshot.get("success"))
     council_review_passed = bool((review.get("data") or {}).get("approved"))
+    completion_review_passed = bool((completion.get("data") or {}).get("approved"))
 
     passed = all([
         pre_test_failed,
@@ -344,6 +355,7 @@ async def main() -> int:
         bool(write_fix.get("success")),
         screenshot_captured,
         council_review_passed,
+        completion_review_passed,
     ])
 
     report = {
@@ -361,6 +373,7 @@ async def main() -> int:
             "dom_fixed": dom_fixed,
             "screenshot_captured": screenshot_captured,
             "council_review_passed": council_review_passed,
+            "completion_review_passed": completion_review_passed,
         },
         "evidence": {
             "terminal_log": str(evidence_dir / "gm-terminal.log"),

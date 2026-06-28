@@ -116,3 +116,36 @@ class TestToolKernel:
         # Then: public release safety is available inside the native tool kernel.
         assert "secret.scan" in tools
         assert "repo.public_safety.audit" in tools
+
+
+class TestCompletionTools:
+    @pytest.mark.asyncio
+    async def test_completion_review_rejects_unmet_criteria(self):
+        # Given: a fusion result that is otherwise reviewable but lacks one required proof.
+        from galaxy_merge.tools.completion_tools import make_completion_tools
+
+        handlers = {schema.name: handler for schema, handler in make_completion_tools()}
+        fusion_result = {
+            "errors": [],
+            "contradictions_resolved": [],
+            "plan": [{"tool": "file.write"}],
+            "risks": [],
+            "changes_proposed": 1,
+            "summary": "Created src/math.js and npm test passed",
+        }
+
+        # When: completion is reviewed against all user-visible criteria.
+        result = await handlers["completion.review"](
+            fusion_result,
+            criteria=["src/math.js", "Answer: 42", "npm test"],
+        )
+
+        # Then: the missing criterion blocks approval instead of allowing completion.
+        assert result.success is True
+        assert result.data["approved"] is False
+        assert result.data["criteria_checks"] == [
+            {"criterion": "src/math.js", "met": True},
+            {"criterion": "Answer: 42", "met": False},
+            {"criterion": "npm test", "met": True},
+        ]
+        assert "Unmet completion criteria: Answer: 42" in result.data["issues"]

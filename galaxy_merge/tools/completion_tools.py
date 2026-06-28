@@ -12,14 +12,20 @@ def make_completion_tools() -> list[tuple[ToolSchema, Any]]:
         review = review_fusion_result(result)
         if criteria:
             checks = []
+            unmet = []
+            content = str(result).lower()
             for criterion in criteria:
-                cl = criterion.lower()
-                content_str = str(result)
-                if cl in content_str.lower():
+                if criterion.lower() in content:
                     checks.append({"criterion": criterion, "met": True})
                 else:
                     checks.append({"criterion": criterion, "met": False})
+                    unmet.append(criterion)
             review["criteria_checks"] = checks
+            if unmet:
+                review["approved"] = False
+                review.setdefault("issues", []).append(
+                    f"Unmet completion criteria: {', '.join(unmet)}",
+                )
         return ToolResult(success=True, data=review)
 
     async def completion_verify(

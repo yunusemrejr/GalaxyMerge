@@ -90,3 +90,19 @@ def test_fallback_secret_scan_accepts_git_history() -> None:
 
     # Then: each revision is scanned as its own Git revision argument.
     assert result.returncode == 0, result.stderr
+
+
+def test_acceptance_matrix_dry_run_lists_all_final_criteria(tmp_path: Path) -> None:
+    # Given: the consolidated acceptance matrix supports a dry-run mode.
+    script = REPO_ROOT / "scripts" / "acceptance_full_matrix.sh"
+
+    # When: the report is generated without launching runtime services.
+    result = _run(str(script), "--dry-run", "--output-dir", str(tmp_path))
+
+    # Then: every final acceptance criterion is represented with evidence refs.
+    assert result.returncode == 0, result.stderr
+    report = json.loads((tmp_path / "acceptance-matrix.json").read_text())
+    assert len(report["criteria"]) == 46
+    assert {row["id"] for row in report["criteria"]} == set(range(1, 47))
+    assert report["steps"]["pytest"]["status"] == "SKIPPED"
+    assert report["steps"]["provider_degradation"]["status"] == "SKIPPED"
