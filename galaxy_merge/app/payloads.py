@@ -13,12 +13,13 @@ from galaxy_merge.locations.registry import LocationRegistry
 from galaxy_merge.safety.credential_policy import CredentialPolicy
 from galaxy_merge.core.concurrency import read_active_port_map
 from galaxy_merge.core.locks import atomic_write
-from galaxy_merge.safety.path_utils import is_relative_to, resolve_inside
 
 APP_INSTALL_DIR = Path(__file__).resolve().parent.parent.parent
 
 
-def build_locations_payload(workroot: Path, gm_dir: Path, app_install_dir: Path = APP_INSTALL_DIR) -> dict[str, Any]:
+def build_locations_payload(
+    workroot: Path, gm_dir: Path, app_install_dir: Path = APP_INSTALL_DIR
+) -> dict[str, Any]:
     registry = LocationRegistry(gm_dir)
     registry.init_from_project(workroot, gm_dir)
     data = registry.to_dict()
@@ -28,29 +29,42 @@ def build_locations_payload(workroot: Path, gm_dir: Path, app_install_dir: Path 
         classifier.classify(str(gm_dir), "path"),
     ]
     for remote in data.get("remote_targets", []):
-        classified.append({
-            "target": remote.get("id", ""),
-            "classification": remote.get("classification", "unknown"),
-            "host": remote.get("host", ""),
-            "path": remote.get("path", ""),
-            "repo": remote.get("repo", ""),
-            "risk": "high" if remote.get("classification") in ("production_target", "staging_target") else "medium",
-            "policy_decision": remote.get("write_policy", "blocked_by_default"),
-            "is_remote": True,
-            "is_production": remote.get("classification") == "production_target",
-            "is_local": False,
-        })
+        classified.append(
+            {
+                "target": remote.get("id", ""),
+                "classification": remote.get("classification", "unknown"),
+                "host": remote.get("host", ""),
+                "path": remote.get("path", ""),
+                "repo": remote.get("repo", ""),
+                "risk": "high"
+                if remote.get("classification")
+                in ("production_target", "staging_target")
+                else "medium",
+                "policy_decision": remote.get("write_policy", "blocked_by_default"),
+                "is_remote": True,
+                "is_production": remote.get("classification") == "production_target",
+                "is_local": False,
+            }
+        )
     data["classified_locations"] = classified
     return data
 
 
-def build_logs_payload(log_path: Path, limit: int = 500, offset: int = 0) -> dict[str, Any]:
+def build_logs_payload(
+    log_path: Path, limit: int = 500, offset: int = 0
+) -> dict[str, Any]:
     safe_limit = max(1, min(limit, 2000))
     safe_offset = max(0, offset)
     if not log_path.exists():
-        return {"lines": [], "total": 0, "offset": safe_offset, "limit": safe_limit, "truncated": False}
+        return {
+            "lines": [],
+            "total": 0,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "truncated": False,
+        }
     lines = log_path.read_text().splitlines()
-    window = lines[safe_offset:safe_offset + safe_limit]
+    window = lines[safe_offset : safe_offset + safe_limit]
     return {
         "lines": window,
         "total": len(lines),
@@ -60,11 +74,19 @@ def build_logs_payload(log_path: Path, limit: int = 500, offset: int = 0) -> dic
     }
 
 
-def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> dict[str, Any]:
+def build_notes_payload(
+    notes_dir: Path, limit: int = 100, offset: int = 0
+) -> dict[str, Any]:
     safe_limit = max(1, min(limit, 500))
     safe_offset = max(0, offset)
     if not notes_dir.exists():
-        return {"notes": [], "total": 0, "offset": safe_offset, "limit": safe_limit, "truncated": False}
+        return {
+            "notes": [],
+            "total": 0,
+            "offset": safe_offset,
+            "limit": safe_limit,
+            "truncated": False,
+        }
     index = {}
     index_path = notes_dir / "index.json"
     if index_path.exists():
@@ -75,26 +97,29 @@ def build_notes_payload(notes_dir: Path, limit: int = 100, offset: int = 0) -> d
         except (json.JSONDecodeError, OSError):
             index = {}
     files = [
-        f for f in sorted(notes_dir.iterdir())
+        f
+        for f in sorted(notes_dir.iterdir())
         if f.suffix in (".md", ".txt", ".json") and f.name != "index.json"
     ]
     entries = []
     legacy_notes = {}
-    for f in files[safe_offset:safe_offset + safe_limit]:
+    for f in files[safe_offset : safe_offset + safe_limit]:
         content = f.read_text()
         meta = index.get(f.stem, {})
-        entries.append({
-            "name": f.stem,
-            "path": f.name,
-            "content": content,
-            "preview": content[:200],
-            "id": meta.get("id", f"note_{f.stem}"),
-            "title": meta.get("title", f.stem),
-            "tags": meta.get("tags", []),
-            "pinned": bool(meta.get("pinned", False)),
-            "created_at": meta.get("created_at", ""),
-            "updated_at": meta.get("updated_at", ""),
-        })
+        entries.append(
+            {
+                "name": f.stem,
+                "path": f.name,
+                "content": content,
+                "preview": content[:200],
+                "id": meta.get("id", f"note_{f.stem}"),
+                "title": meta.get("title", f.stem),
+                "tags": meta.get("tags", []),
+                "pinned": bool(meta.get("pinned", False)),
+                "created_at": meta.get("created_at", ""),
+                "updated_at": meta.get("updated_at", ""),
+            }
+        )
         legacy_notes[f.stem] = content
     return {
         **legacy_notes,
@@ -132,7 +157,17 @@ def _save_notes_index(notes_dir: Path, index: dict[str, Any]) -> None:
     atomic_write(index_path, json.dumps(index, indent=2), _nested_lock=True)
 
 
-def _upsert_note_index(notes_dir: Path, note_name: str, path: str, *, created_at: str | None = None, tags: list[str] | None = None, pinned: bool = False, title: str | None = None, updated_at: str | None = None) -> None:
+def _upsert_note_index(
+    notes_dir: Path,
+    note_name: str,
+    path: str,
+    *,
+    created_at: str | None = None,
+    tags: list[str] | None = None,
+    pinned: bool = False,
+    title: str | None = None,
+    updated_at: str | None = None,
+) -> None:
     notes_dir.mkdir(parents=True, exist_ok=True)
     index = _load_notes_index(notes_dir)
     entries = index.setdefault("notes", [])
@@ -179,8 +214,11 @@ def _remove_note_from_index(notes_dir: Path, note_name: str) -> None:
     _save_notes_index(notes_dir, index)
 
 
-def _read_active_sessions(gm_dir: Path, current_session_id: str) -> list[dict[str, Any]]:
+def _read_active_sessions(
+    gm_dir: Path, current_session_id: str
+) -> list[dict[str, Any]]:
     import time
+
     ports = read_active_port_map(gm_dir)
     now = time.time()
     hb_dir = gm_dir / "sessions" / "heartbeats"
@@ -193,38 +231,44 @@ def _read_active_sessions(gm_dir: Path, current_session_id: str) -> list[dict[st
         hb = hb_dir / f"{session_id}.hb"
         hb_age = now - hb.stat().st_mtime if hb.exists() else None
         active = hb_age is not None and hb_age < 300
-        sessions.append({
-            "session_id": session_id,
-            "port": record.get("port"),
-            "pid": record.get("pid"),
-            "workroot": state.get("workroot", gm_dir.parent.as_posix()),
-            "status": state.get("status", "unknown"),
-            "goal": state.get("goal", ""),
-            "active": bool(active),
-            "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
-            "error": state.get("error"),
-            "goal_state": state.get("status", "unknown"),
-            "last_heartbeat": record.get("updated_at"),
-        })
+        sessions.append(
+            {
+                "session_id": session_id,
+                "port": record.get("port"),
+                "pid": record.get("pid"),
+                "workroot": state.get("workroot", gm_dir.parent.as_posix()),
+                "status": state.get("status", "unknown"),
+                "goal": state.get("goal", ""),
+                "active": bool(active),
+                "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
+                "error": state.get("error"),
+                "goal_state": state.get("status", "unknown"),
+                "last_heartbeat": record.get("updated_at"),
+            }
+        )
 
     if current_session_id not in seen:
-        current_state = _read_json_file(gm_dir / "sessions" / current_session_id / "state.json", {})
+        current_state = _read_json_file(
+            gm_dir / "sessions" / current_session_id / "state.json", {}
+        )
         hb = hb_dir / f"{current_session_id}.hb"
         hb_age = now - hb.stat().st_mtime if hb.exists() else None
         current_record = ports.get(current_session_id, {})
-        sessions.append({
-            "session_id": current_session_id,
-            "port": current_record.get("port"),
-            "pid": current_record.get("pid"),
-            "workroot": current_state.get("workroot", gm_dir.parent.as_posix()),
-            "status": current_state.get("status", "unknown"),
-            "goal": current_state.get("goal", ""),
-            "active": hb_age is not None and hb_age < 300,
-            "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
-            "error": current_state.get("error"),
-            "goal_state": current_state.get("status", "unknown"),
-            "last_heartbeat": hb.stat().st_mtime if hb.exists() else None,
-        })
+        sessions.append(
+            {
+                "session_id": current_session_id,
+                "port": current_record.get("port"),
+                "pid": current_record.get("pid"),
+                "workroot": current_state.get("workroot", gm_dir.parent.as_posix()),
+                "status": current_state.get("status", "unknown"),
+                "goal": current_state.get("goal", ""),
+                "active": hb_age is not None and hb_age < 300,
+                "heartbeat_age": round(hb_age, 1) if hb_age is not None else None,
+                "error": current_state.get("error"),
+                "goal_state": current_state.get("status", "unknown"),
+                "last_heartbeat": hb.stat().st_mtime if hb.exists() else None,
+            }
+        )
 
     sessions.sort(key=lambda item: (not item["active"], item["session_id"]))
     return sessions
@@ -240,9 +284,11 @@ def _redact_nested(value: Any, policy: CredentialPolicy) -> Any:
     return value
 
 
-def build_council_event_summary(events: list[dict[str, Any]], workroot: Path, limit: int = 200) -> dict[str, Any]:
+def build_council_event_summary(
+    events: list[dict[str, Any]], workroot: Path, limit: int = 200
+) -> dict[str, Any]:
     policy = CredentialPolicy(workroot)
-    recent = events[-max(1, min(limit, 1000)):]
+    recent = events[-max(1, min(limit, 1000)) :]
     rows_by_key: dict[tuple[str, str, str], dict[str, Any]] = {}
     provider_failures: list[dict[str, Any]] = []
     fallback_events: list[dict[str, Any]] = []
@@ -251,7 +297,11 @@ def build_council_event_summary(events: list[dict[str, Any]], workroot: Path, li
         event = _redact_nested(raw_event, policy)
         event_name = event.get("event", "")
         role = event.get("role", "")
-        provider_id = event.get("provider_id") or event.get("provider") or event.get("to_provider", "")
+        provider_id = (
+            event.get("provider_id")
+            or event.get("provider")
+            or event.get("to_provider", "")
+        )
         model = event.get("model", "")
         key = (role, provider_id, model)
 
@@ -313,11 +363,13 @@ def build_council_event_summary(events: list[dict[str, Any]], workroot: Path, li
 
     return {
         "roles": list(rows_by_key.values()),
-        "degraded_roles": sorted({
-            row.get("role", "")
-            for row in rows_by_key.values()
-            if row.get("role") and row.get("status") in {"degraded", "failed"}
-        }),
+        "degraded_roles": sorted(
+            {
+                row.get("role", "")
+                for row in rows_by_key.values()
+                if row.get("role") and row.get("status") in {"degraded", "failed"}
+            }
+        ),
         "provider_failures": provider_failures,
         "fallback_events": fallback_events,
     }
@@ -327,7 +379,11 @@ def build_tree(path: Path, base: Path, max_entries: int = 500) -> dict[str, Any]
     counter = {"count": 0, "truncated": False}
 
     def build(current: Path) -> dict[str, Any]:
-        result: dict[str, Any] = {"name": current.name, "type": "directory", "children": []}
+        result: dict[str, Any] = {
+            "name": current.name,
+            "type": "directory",
+            "children": [],
+        }
         if current.is_dir():
             try:
                 for child in sorted(current.iterdir()):
@@ -343,7 +399,9 @@ def build_tree(path: Path, base: Path, max_entries: int = 500) -> dict[str, Any]
                         result["children"].append(build(child))
                     else:
                         size = child.stat().st_size if child.exists() else 0
-                        result["children"].append({"name": child.name, "type": "file", "size": size})
+                        result["children"].append(
+                            {"name": child.name, "type": "file", "size": size}
+                        )
             except PermissionError:
                 pass
         return result

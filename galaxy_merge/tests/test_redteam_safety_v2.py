@@ -3,21 +3,18 @@ Red-team safety tests V2: Cover every bypass found during security audit.
 All attacks MUST be blocked. If any test fails, a safety boundary has been breached.
 """
 
+import os
+from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.unit]
-import os
-import tempfile
-from pathlib import Path
-
-from galaxy_merge.safety.governor import SafetyGovernor
-from galaxy_merge.safety.command_policy import CommandPolicy
-from galaxy_merge.safety.path_policy import PathPolicy
-from galaxy_merge.safety.credential_policy import CredentialPolicy
-from galaxy_merge.safety.self_protection import SelfProtectionPolicy
 from galaxy_merge.safety.audit import SafetyAudit
+from galaxy_merge.safety.command_policy import CommandPolicy
+from galaxy_merge.safety.governor import SafetyGovernor
+from galaxy_merge.safety.path_policy import PathPolicy
 from galaxy_merge.safety.sandbox import Sandbox
+
+pytestmark = [pytest.mark.unit]
 
 
 @pytest.fixture
@@ -50,6 +47,7 @@ def policy(workroot):
 # =============================================================================
 # CRIT-4: rm -rf variant bypasses (combined flags, --no-preserve-root, etc.)
 # =============================================================================
+
 
 class TestRmVariantBypasses:
     def test_block_rm_rfv_root(self, gov):
@@ -84,7 +82,10 @@ class TestRmVariantBypasses:
         assert gov.check_command("rm -rfv /var/log")["decision"] == "block"
 
     def test_block_rm_rf_opt_app(self, gov):
-        assert gov.check_command("rm -rf --interactive=never /opt/app")["decision"] == "block"
+        assert (
+            gov.check_command("rm -rf --interactive=never /opt/app")["decision"]
+            == "block"
+        )
 
     def test_block_rm_r_etc(self, gov):
         assert gov.check_command("rm -r /etc")["decision"] == "block"
@@ -103,6 +104,7 @@ class TestRmVariantBypasses:
 # CRIT-3: SUDO case bypass
 # =============================================================================
 
+
 class TestSudoCaseBypasses:
     def test_block_sudo_uppercase(self, gov):
         assert gov.check_command("SUDO rm -rf /")["decision"] == "block"
@@ -120,6 +122,7 @@ class TestSudoCaseBypasses:
 # =============================================================================
 # CRIT-5: Full-path binary bypass
 # =============================================================================
+
 
 class TestFullPathBinaryBypasses:
     def test_block_usr_bin_git_push(self, gov):
@@ -147,24 +150,40 @@ class TestFullPathBinaryBypasses:
 # CRIT-6: dd variant bypass
 # =============================================================================
 
+
 class TestDdVariantBypasses:
     def test_block_dd_of_first(self, gov):
-        assert gov.check_command("dd of=/etc/passwd if=/dev/zero")["decision"] == "block"
+        assert (
+            gov.check_command("dd of=/etc/passwd if=/dev/zero")["decision"] == "block"
+        )
 
     def test_block_dd_to_shadow(self, gov):
-        assert gov.check_command("dd if=/dev/random of=/etc/shadow")["decision"] == "block"
+        assert (
+            gov.check_command("dd if=/dev/random of=/etc/shadow")["decision"] == "block"
+        )
 
     def test_block_dd_to_sudoers(self, gov):
-        assert gov.check_command("dd if=/dev/null of=/etc/sudoers")["decision"] == "block"
+        assert (
+            gov.check_command("dd if=/dev/null of=/etc/sudoers")["decision"] == "block"
+        )
 
     def test_block_usr_bin_dd(self, gov):
-        assert gov.check_command("/usr/bin/dd if=/dev/zero of=/etc/passwd")["decision"] == "block"
+        assert (
+            gov.check_command("/usr/bin/dd if=/dev/zero of=/etc/passwd")["decision"]
+            == "block"
+        )
 
     def test_block_dd_to_boot(self, gov):
-        assert gov.check_command("dd if=/dev/random of=/boot/evil.img")["decision"] == "block"
+        assert (
+            gov.check_command("dd if=/dev/random of=/boot/evil.img")["decision"]
+            == "block"
+        )
 
     def test_block_dd_block_size_variant(self, gov):
-        assert gov.check_command("dd bs=4M if=/dev/zero of=/etc/cron.d/evil")["decision"] == "block"
+        assert (
+            gov.check_command("dd bs=4M if=/dev/zero of=/etc/cron.d/evil")["decision"]
+            == "block"
+        )
 
     def test_block_dd_read_system_device_to_safe_output(self, gov):
         """dd if=/dev/sda of=/tmp/backup.img must block even when of= is safe.
@@ -173,7 +192,10 @@ class TestDdVariantBypasses:
         destination. The old check only inspected ``of=`` once a non-system
         ``of=`` was present, silently skipping the ``if=`` system check.
         """
-        assert gov.check_command("dd if=/dev/sda of=/tmp/backup.img")["decision"] == "block"
+        assert (
+            gov.check_command("dd if=/dev/sda of=/tmp/backup.img")["decision"]
+            == "block"
+        )
 
     def test_block_dd_read_system_partition_to_safe_output(self, gov):
         assert gov.check_command("dd if=/dev/sda1 of=/tmp/x.img")["decision"] == "block"
@@ -186,9 +208,11 @@ class TestDdVariantBypasses:
 # CRIT-1: Readonly mode redirect/pipe bypass
 # =============================================================================
 
+
 class TestReadOnlyModeRedirectBypasses:
     def test_readonly_blocks_echo_redirect(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -197,6 +221,7 @@ class TestReadOnlyModeRedirectBypasses:
 
     def test_readonly_blocks_echo_append(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -205,6 +230,7 @@ class TestReadOnlyModeRedirectBypasses:
 
     def test_readonly_blocks_cat_redirect(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -213,6 +239,7 @@ class TestReadOnlyModeRedirectBypasses:
 
     def test_readonly_blocks_pipe_anywhere(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -224,25 +251,34 @@ class TestReadOnlyModeRedirectBypasses:
 # MED-1: Python/Node code injection in safe list
 # =============================================================================
 
+
 class TestCodeInjectionBypasses:
     def test_block_python_os_system(self, gov):
         result = gov.check_command("python3 -c \"import os; os.system('rm -rf /')\"")
         assert result["decision"] == "block"
 
     def test_block_python_subprocess(self, gov):
-        result = gov.check_command("python3 -c \"import subprocess; subprocess.run(['rm', '-rf', '/'])\"")
+        result = gov.check_command(
+            "python3 -c \"import subprocess; subprocess.run(['rm', '-rf', '/'])\""
+        )
         assert result["decision"] == "block"
 
     def test_block_python_exec(self, gov):
-        result = gov.check_command("python3 -c \"exec('import os; os.system(\\\"rm -rf /etc\\\")')\"")
+        result = gov.check_command(
+            'python3 -c "exec(\'import os; os.system(\\"rm -rf /etc\\")\')"'
+        )
         assert result["decision"] == "block"
 
     def test_block_node_child_process(self, gov):
-        result = gov.check_command("node -e \"require('child_process').execSync('rm -rf /')\"")
+        result = gov.check_command(
+            "node -e \"require('child_process').execSync('rm -rf /')\""
+        )
         assert result["decision"] == "block"
 
     def test_block_node_spawn(self, gov):
-        result = gov.check_command("node -e \"require('child_process').spawn('rm', ['-rf', '/'])\"")
+        result = gov.check_command(
+            "node -e \"require('child_process').spawn('rm', ['-rf', '/'])\""
+        )
         assert result["decision"] == "block"
 
     def test_block_python2_os_system(self, gov):
@@ -254,23 +290,43 @@ class TestCodeInjectionBypasses:
 # MED-2: Git hooks persistence
 # =============================================================================
 
+
 class TestGitHookWrites:
     def test_block_git_hooks_pre_commit(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / ".git" / "hooks" / "pre-commit"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(workroot / ".git" / "hooks" / "pre-commit"))[
+                "decision"
+            ]
+            == "block"
+        )
 
     def test_block_git_hooks_post_commit(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / ".git" / "hooks" / "post-commit"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(workroot / ".git" / "hooks" / "post-commit"))[
+                "decision"
+            ]
+            == "block"
+        )
 
     def test_block_git_config_write(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / ".git" / "config"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(workroot / ".git" / "config"))["decision"]
+            == "block"
+        )
 
     def test_block_git_hooks_applypatch_msg(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / ".git" / "hooks" / "applypatch-msg"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(workroot / ".git" / "hooks" / "applypatch-msg"))[
+                "decision"
+            ]
+            == "block"
+        )
 
 
 # =============================================================================
 # MED-3: Credential read blocking
 # =============================================================================
+
 
 class TestCredentialReadBlocking:
     def test_block_read_env_file(self, tmp_path):
@@ -349,6 +405,7 @@ class TestCredentialReadBlocking:
 # MED-5: trash command on system files
 # =============================================================================
 
+
 class TestTrashCommand:
     def test_block_trash_etc(self, gov):
         assert gov.check_command("trash /etc/passwd")["decision"] == "block"
@@ -370,15 +427,20 @@ class TestTrashCommand:
 # Self-protection: inside-codebase detection + bypass attempts
 # =============================================================================
 
+
 class TestSelfProtectionAdvanced:
     def test_block_self_mod_write_governor(self, gov):
         import galaxy_merge
+
         pkg = Path(galaxy_merge.__file__).resolve().parent.parent
-        result = gov.check_path_write(str(pkg / "galaxy_merge" / "safety" / "governor.py"))
+        result = gov.check_path_write(
+            str(pkg / "galaxy_merge" / "safety" / "governor.py")
+        )
         assert result["decision"] == "block"
 
     def test_block_self_mod_write_pyproject(self, gov):
         import galaxy_merge
+
         pkg = Path(galaxy_merge.__file__).resolve().parent.parent
         result = gov.check_path_write(str(pkg / "pyproject.toml"))
         assert result["decision"] == "block"
@@ -399,6 +461,7 @@ class TestSelfProtectionAdvanced:
 # =============================================================================
 # Location classifier edge cases
 # =============================================================================
+
 
 class TestLocationClassifierEdgeCases:
     def test_block_git_push_force(self, gov):
@@ -438,6 +501,7 @@ class TestLocationClassifierEdgeCases:
 # CRIT-2: allow_with_audit enforcement verification
 # =============================================================================
 
+
 class TestAllowWithAuditEnforcement:
     def test_allow_with_audit_not_equal_allow(self, gov):
         result = gov.check_command("git push origin main")
@@ -458,6 +522,7 @@ class TestAllowWithAuditEnforcement:
 # =============================================================================
 # Environment variable edge cases
 # =============================================================================
+
 
 class TestEnvVarEdgeCases:
     def test_redact_openai_env_ref(self, gov):
@@ -482,6 +547,7 @@ class TestEnvVarEdgeCases:
 # =============================================================================
 # Audit trail completeness
 # =============================================================================
+
 
 class TestSafetyAuditCompleteness:
     def test_audit_logs_blocked_commands(self, gov, audit):
@@ -512,6 +578,7 @@ class TestSafetyAuditCompleteness:
 # Sandbox security enforcement
 # =============================================================================
 
+
 class TestSandboxAdvanced:
     def test_sandbox_no_shell_true(self, workroot):
         sandbox = Sandbox(workroot)
@@ -539,6 +606,7 @@ class TestSandboxAdvanced:
 # Symlink escape comprehensive
 # =============================================================================
 
+
 class TestSymlinkEscapes:
     def test_block_symlink_to_etc(self, gov, workroot):
         target = workroot / "evil_link"
@@ -561,12 +629,26 @@ class TestSymlinkEscapes:
             mid.symlink_to("/")
         if not target.exists():
             target.symlink_to(mid)
-        assert gov.check_path_write(str(target / "etc" / "passwd"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(target / "etc" / "passwd"))["decision"] == "block"
+        )
 
     def test_block_proc_cwd_escape(self, gov, workroot):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
-        result = gov.check_path_write(str(workroot / ".." / ".." / ".." / pkg_dir.name / "galaxy_merge" / "safety" / "governor.py"))
+        result = gov.check_path_write(
+            str(
+                workroot
+                / ".."
+                / ".."
+                / ".."
+                / pkg_dir.name
+                / "galaxy_merge"
+                / "safety"
+                / "governor.py"
+            )
+        )
         assert result["decision"] == "block"
 
 
@@ -574,18 +656,39 @@ class TestSymlinkEscapes:
 # Path traversal edge cases
 # =============================================================================
 
+
 class TestPathTraversal:
     def test_block_absolute_etc_outside_workroot(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / ".." / ".." / "etc" / "passwd"))["decision"] == "block"
+        assert (
+            gov.check_path_write(str(workroot / ".." / ".." / "etc" / "passwd"))[
+                "decision"
+            ]
+            == "block"
+        )
 
     def test_block_deeply_nested_traversal(self, gov, workroot):
-        deep = workroot / "a" / "b" / "c" / ".." / ".." / ".." / ".." / ".." / "etc" / "passwd"
+        deep = (
+            workroot
+            / "a"
+            / "b"
+            / "c"
+            / ".."
+            / ".."
+            / ".."
+            / ".."
+            / ".."
+            / "etc"
+            / "passwd"
+        )
         assert gov.check_path_write(str(deep))["decision"] == "block"
 
     def test_block_traversal_with_symlink_component(self, gov, workroot):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
-        deep = workroot / ".." / pkg_dir.name / "galaxy_merge" / "safety" / "governor.py"
+        deep = (
+            workroot / ".." / pkg_dir.name / "galaxy_merge" / "safety" / "governor.py"
+        )
         assert gov.check_path_write(str(deep))["decision"] == "block"
 
 
@@ -593,9 +696,11 @@ class TestPathTraversal:
 # Readonly mode comprehensive
 # =============================================================================
 
+
 class TestReadOnlyModeComprehensive:
     def test_readonly_blocks_git_commit(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -604,6 +709,7 @@ class TestReadOnlyModeComprehensive:
 
     def test_readonly_blocks_git_tag(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -612,6 +718,7 @@ class TestReadOnlyModeComprehensive:
 
     def test_readonly_blocks_mkdir(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -620,6 +727,7 @@ class TestReadOnlyModeComprehensive:
 
     def test_readonly_allows_ls(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -628,6 +736,7 @@ class TestReadOnlyModeComprehensive:
 
     def test_readonly_blocks_git_status(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -636,6 +745,7 @@ class TestReadOnlyModeComprehensive:
 
     def test_readonly_blocks_git_diff(self, workroot, gm_dir, audit):
         import galaxy_merge
+
         pkg_dir = Path(galaxy_merge.__file__).resolve().parent.parent
         ro_gov = SafetyGovernor(pkg_dir, pkg_dir / ".gm", audit)
         if ro_gov.is_readonly_mode:
@@ -646,6 +756,7 @@ class TestReadOnlyModeComprehensive:
 # =============================================================================
 # WorkRoot boundary enforcement
 # =============================================================================
+
 
 class TestWorkRootBoundary:
     def test_block_write_tmp(self, gov):
@@ -667,7 +778,13 @@ class TestWorkRootBoundary:
         assert gov.check_path_write("/dev/sda")["decision"] == "block"
 
     def test_allow_write_inside_workroot(self, gov, workroot):
-        assert gov.check_path_write(str(workroot / "src" / "main.py"))["decision"] == "allow"
+        assert (
+            gov.check_path_write(str(workroot / "src" / "main.py"))["decision"]
+            == "allow"
+        )
 
     def test_allow_write_gm_dir(self, gov, gm_dir):
-        assert gov.check_path_write(str(gm_dir / "notes" / "user.md"))["decision"] == "allow"
+        assert (
+            gov.check_path_write(str(gm_dir / "notes" / "user.md"))["decision"]
+            == "allow"
+        )

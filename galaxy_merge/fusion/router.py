@@ -17,6 +17,7 @@ class FusionRouter:
         routing_path = self.config_dir / "routing.json"
         if routing_path.exists():
             import json
+
             data = json.loads(routing_path.read_text())
             self._routing_rules = data.get("routing_rules", [])
             self._fallback = data.get("fallback", {})
@@ -24,6 +25,7 @@ class FusionRouter:
         fusion_path = self.config_dir / "fusion.json"
         if fusion_path.exists():
             import json
+
             self._fusion_config = json.loads(fusion_path.read_text())
         else:
             self._fusion_config = {}
@@ -41,7 +43,11 @@ class FusionRouter:
         councils = self._fusion_config.get("councils", {})
         return councils.get(fallback_name, {})
 
-    def create_council(self, task_type: str, goal: str, event_log=None, session_id: str = "") -> Council:
+    def create_council(
+        self, task_type: str, goal: str, event_log=None, session_id: str = ""
+    ) -> Council:
         config = self.select_council(task_type)
-        council = Council(self.providers, config, goal, event_log=event_log, session_id=session_id)
+        council = Council(
+            self.providers, config, goal, event_log=event_log, session_id=session_id
+        )
         return council

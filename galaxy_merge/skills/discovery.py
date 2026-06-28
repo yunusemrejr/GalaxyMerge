@@ -70,6 +70,7 @@ class SkillDiscovery:
     def _extract_triggers(self, content: str, fmt: str) -> list[str]:
         if fmt == "skill.json":
             import json
+
             try:
                 data = json.loads(content)
                 return data.get("triggers", [])
@@ -78,6 +79,7 @@ class SkillDiscovery:
         elif fmt in (".yaml", "skill.yaml"):
             try:
                 import yaml
+
                 data = yaml.safe_load(content)
                 if isinstance(data, dict):
                     return data.get("triggers", [])

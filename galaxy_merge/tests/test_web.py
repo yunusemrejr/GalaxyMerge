@@ -1,11 +1,10 @@
-
-
 import pytest
 
-pytestmark = [pytest.mark.integration]
-from galaxy_merge.web.search import WebSearch
 from galaxy_merge.web.fetch import fetch_page
+from galaxy_merge.web.search import WebSearch
 from galaxy_merge.tools.web_tools import make_web_tools
+
+pytestmark = [pytest.mark.integration]
 
 
 class TestWebSearch:
@@ -42,7 +41,10 @@ class TestWebSearch:
     def test_fetch_page_blocks_binary_response_without_body_read(self, monkeypatch):
         # Given: a binary response whose body reader must not be consumed.
         class BinaryResponse:
-            headers = {"content-type": "application/octet-stream", "content-length": "4"}
+            headers = {
+                "content-type": "application/octet-stream",
+                "content-length": "4",
+            }
             status_code = 200
             encoding = "utf-8"
 
@@ -113,7 +115,9 @@ class TestWebSearch:
         assert "max_bytes" in schemas["web.curl.fetch"].parameters
 
     @pytest.mark.asyncio
-    async def test_web_fetch_tool_passes_max_bytes_to_fetch_layer(self, monkeypatch, tmp_path):
+    async def test_web_fetch_tool_passes_max_bytes_to_fetch_layer(
+        self, monkeypatch, tmp_path
+    ):
         # Given: a fetch layer that records the byte cap.
         seen = {}
 
@@ -138,6 +142,7 @@ class TestDuckDuckGo:
     @pytest.mark.network
     def test_search_returns_list(self):
         from galaxy_merge.web.duckduckgo import search_duckduckgo
+
         results = search_duckduckgo("test query")
         assert isinstance(results, list)
 
@@ -145,12 +150,14 @@ class TestDuckDuckGo:
 class TestWikipedia:
     @pytest.mark.network
     def test_search_returns_list(self):
-        from galaxy_merge.web.wikipedia import search_wikipedia, get_wikipedia_summary
+        from galaxy_merge.web.wikipedia import search_wikipedia
+
         results = search_wikipedia("Python programming language")
         assert isinstance(results, list)
 
     @pytest.mark.network
     def test_summary(self):
         from galaxy_merge.web.wikipedia import get_wikipedia_summary
+
         result = get_wikipedia_summary("Python (programming language)")
         assert "extract" in result or "error" in result

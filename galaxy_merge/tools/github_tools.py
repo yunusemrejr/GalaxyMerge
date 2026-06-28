@@ -17,7 +17,14 @@ def make_github_tools(cache_dir: Path | None = None) -> list[tuple[ToolSchema, A
         return ToolResult(success=True, data=result)
 
     return [
-        (ToolSchema("github.repo.scan", "Scan a GitHub repository and return metadata + file tree", parameters={
-            "url": {"type": "string", "required": True},
-        }), github_repo_scan),
+        (
+            ToolSchema(
+                "github.repo.scan",
+                "Scan a GitHub repository and return metadata + file tree",
+                parameters={
+                    "url": {"type": "string", "required": True},
+                },
+            ),
+            github_repo_scan,
+        ),
     ]

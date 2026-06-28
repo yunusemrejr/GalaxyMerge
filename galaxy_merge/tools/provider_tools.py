@@ -13,32 +13,54 @@ def make_provider_tools(provider_registry) -> list[tuple[ToolSchema, Any]]:
     ) -> ToolResult:
         provider = provider_registry.get(provider_id)
         if not provider:
-            return ToolResult(success=False, error=f"provider '{provider_id}' not found")
+            return ToolResult(
+                success=False, error=f"provider '{provider_id}' not found"
+            )
         if not provider.healthy:
-            return ToolResult(success=False, error=f"provider '{provider_id}' is unhealthy")
+            return ToolResult(
+                success=False, error=f"provider '{provider_id}' is unhealthy"
+            )
 
-        result = await provider.chat_completion(messages, model, temperature=temperature)
+        result = await provider.chat_completion(
+            messages, model, temperature=temperature
+        )
         if result.get("success"):
-            return ToolResult(success=True, data={
-                "provider": provider_id,
-                "model": result.get("model", model),
-                "content": result.get("content", ""),
-                "usage": result.get("usage", {}),
-            })
-        return ToolResult(success=False, error=result.get("error", "provider call failed"))
+            return ToolResult(
+                success=True,
+                data={
+                    "provider": provider_id,
+                    "model": result.get("model", model),
+                    "content": result.get("content", ""),
+                    "usage": result.get("usage", {}),
+                },
+            )
+        return ToolResult(
+            success=False, error=result.get("error", "provider call failed")
+        )
 
     return [
-        (ToolSchema("provider.call", "Call a provider directly with a chat completion request", parameters={
-            "provider_id": {"type": "string", "required": True},
-            "model": {"type": "string", "required": True},
-            "messages": {"type": "array", "items": {
-                "type": "object",
-                "properties": {
-                    "role": {"type": "string"},
-                    "content": {"type": "string"},
+        (
+            ToolSchema(
+                "provider.call",
+                "Call a provider directly with a chat completion request",
+                parameters={
+                    "provider_id": {"type": "string", "required": True},
+                    "model": {"type": "string", "required": True},
+                    "messages": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "role": {"type": "string"},
+                                "content": {"type": "string"},
+                            },
+                        },
+                        "required": True,
+                    },
+                    "temperature": {"type": "number", "default": 0.3},
+                    "max_tokens": {"type": "integer", "default": None},
                 },
-            }, "required": True},
-            "temperature": {"type": "number", "default": 0.3},
-            "max_tokens": {"type": "integer", "default": None},
-        }), provider_call),
+            ),
+            provider_call,
+        ),
     ]

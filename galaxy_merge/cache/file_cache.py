@@ -1,5 +1,4 @@
 from pathlib import Path
-from typing import Any
 
 from galaxy_merge.cache.store import CacheStore
 

@@ -7,7 +7,12 @@ from pathlib import Path
 from galaxy_merge.app.server import start_server
 from galaxy_merge.app.browser import open_browser
 from galaxy_merge.app.lifecycle import print_boot_log
-from galaxy_merge.core.session import detect_workroot, init_gm_dir, Session, validate_gm_structure
+from galaxy_merge.core.session import (
+    detect_workroot,
+    init_gm_dir,
+    Session,
+    validate_gm_structure,
+)
 from galaxy_merge.core.config import load_app_config
 from galaxy_merge.core.concurrency import (
     cleanup_stale_sessions,
@@ -22,6 +27,7 @@ VERSION = "0.1.0"
 def _detect_install_dir() -> Path | None:
     try:
         import galaxy_merge
+
         pkg_path = Path(galaxy_merge.__file__).resolve().parent
         install_dir = pkg_path.parent
         if (install_dir / "pyproject.toml").exists() or (install_dir / "gm").exists():
@@ -102,11 +108,17 @@ class Launcher:
         gm_validation = validate_gm_structure(workroot / ".gm")
         if not gm_validation["ok"]:
             print("", file=sys.stderr)
-            print(f"WARNING: .gm/ structure validation found {len(gm_validation['warnings'])} issue(s):", file=sys.stderr)
+            print(
+                f"WARNING: .gm/ structure validation found {len(gm_validation['warnings'])} issue(s):",
+                file=sys.stderr,
+            )
             for w in gm_validation["warnings"][:8]:
                 print(f"  - {w}", file=sys.stderr)
             if len(gm_validation["warnings"]) > 8:
-                print(f"  ... and {len(gm_validation['warnings']) - 8} more (see .gm/ logs)", file=sys.stderr)
+                print(
+                    f"  ... and {len(gm_validation['warnings']) - 8} more (see .gm/ logs)",
+                    file=sys.stderr,
+                )
             print("", file=sys.stderr)
 
         session_id = self.resume_session_id
@@ -119,14 +131,17 @@ class Launcher:
             return 1
         self.session.save_state()
         self.session.mark_running()
-        
+
         write_heartbeat(self.session.gm_dir, self.session.session_id)
 
         self.server_info = start_server(self.session, port=self.port)
         mapped_port = self.server_info["port"]
 
         from galaxy_merge.providers.registry import ProviderRegistry
-        provider_registry = ProviderRegistry(self.server_info["server"].config_dir, session_id=self.session.session_id)
+
+        provider_registry = ProviderRegistry(
+            self.server_info["server"].config_dir, session_id=self.session.session_id
+        )
         provider_registry.load()
         all_providers = provider_registry.available_providers()
         loaded = len(all_providers)

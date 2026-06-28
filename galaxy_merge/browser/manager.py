@@ -56,17 +56,23 @@ class BrowserManager:
             "--disable-extensions",
             "--disable-sync",
             "--disable-translate",
-            f"--remote-debugging-port={debug_port}" if debug_port else "--remote-debugging-port=0",
+            f"--remote-debugging-port={debug_port}"
+            if debug_port
+            else "--remote-debugging-port=0",
             "--window-size=1280,800",
             url,
         ]
-        if os.environ.get("GM_BROWSER_HEADLESS") == "1" or not os.environ.get("DISPLAY"):
-            args.extend([
-                "--headless=new",
-                "--disable-gpu",
-                "--disable-dev-shm-usage",
-                "--no-sandbox",
-            ])
+        if os.environ.get("GM_BROWSER_HEADLESS") == "1" or not os.environ.get(
+            "DISPLAY"
+        ):
+            args.extend(
+                [
+                    "--headless=new",
+                    "--disable-gpu",
+                    "--disable-dev-shm-usage",
+                    "--no-sandbox",
+                ]
+            )
 
         try:
             process = subprocess.Popen(
@@ -94,7 +100,9 @@ class BrowserManager:
                 self._cdp_monitors[session_id] = monitor
                 monitor.start()
             else:
-                console.add_warning("DevTools capture disabled: no local debug port available", "cdp")
+                console.add_warning(
+                    "DevTools capture disabled: no local debug port available", "cdp"
+                )
 
             return {
                 "success": True,
@@ -124,6 +132,7 @@ class BrowserManager:
                 except Exception:
                     proc.kill()
             import shutil
+
             profile = session.get("profile_dir", "")
             if profile and Path(profile).exists():
                 shutil.rmtree(profile, ignore_errors=True)
@@ -168,7 +177,9 @@ class BrowserManager:
             return 0
         return int(session.get("debug_port", 0) or 0)
 
-    def _run_page_command(self, session_id: str, method: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
+    def _run_page_command(
+        self, session_id: str, method: str, params: dict[str, Any] | None = None
+    ) -> dict[str, Any]:
         port = self._debug_port(session_id)
         if not port:
             return {"success": False, "error": "DevTools capture not available"}
@@ -195,10 +206,14 @@ class BrowserManager:
     def dom_snapshot(self, session_id: str, selector: str = "body") -> dict[str, Any]:
         if session_id not in self._sessions:
             return {"success": False, "error": "session not found"}
-        result = self._run_page_command(session_id, "Runtime.evaluate", {
-            "expression": "document.documentElement.outerHTML",
-            "returnByValue": True,
-        })
+        result = self._run_page_command(
+            session_id,
+            "Runtime.evaluate",
+            {
+                "expression": "document.documentElement.outerHTML",
+                "returnByValue": True,
+            },
+        )
         if not result.get("success"):
             return result
         response = result.get("response", {})
@@ -221,14 +236,16 @@ class BrowserManager:
             proc = session.get("process")
             if not proc or proc.poll() is not None:
                 return {"success": False, "error": "browser process not running"}
-            cdp_result = self._run_page_command(session_id, "Page.captureScreenshot", {
-                "format": "png",
-                "captureBeyondViewport": True,
-            })
+            cdp_result = self._run_page_command(
+                session_id,
+                "Page.captureScreenshot",
+                {
+                    "format": "png",
+                    "captureBeyondViewport": True,
+                },
+            )
             image_data = (
-                cdp_result.get("response", {})
-                .get("result", {})
-                .get("data", "")
+                cdp_result.get("response", {}).get("result", {}).get("data", "")
             )
             if cdp_result.get("success") and image_data:
                 return self._screenshot_mgr.save_cdp_capture(session_id, image_data)

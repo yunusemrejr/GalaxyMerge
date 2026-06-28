@@ -21,7 +21,8 @@ def test_all_js_files_have_valid_syntax():
         rel = js_file.relative_to(GUI_JS_DIR.parent.parent.parent)
         result = subprocess.run(
             ["node", "--check", str(js_file)],
-            capture_output=True, text=True,
+            capture_output=True,
+            text=True,
         )
         if result.returncode != 0:
             errors.append(f"{rel}: {result.stderr.strip()}")

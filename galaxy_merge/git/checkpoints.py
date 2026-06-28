@@ -12,7 +12,9 @@ class Checkpoints:
         self.patchsets_dir.mkdir(parents=True, exist_ok=True)
         self._index_path = gm_dir / "git" / "checkpoints.jsonl"
 
-    def save(self, checkpoint_id: str, session_id: str, files_changed: list[str], reason: str) -> dict[str, Any]:
+    def save(
+        self, checkpoint_id: str, session_id: str, files_changed: list[str], reason: str
+    ) -> dict[str, Any]:
         record = {
             "checkpoint_id": checkpoint_id,
             "created_at": datetime.now(timezone.utc).isoformat(),

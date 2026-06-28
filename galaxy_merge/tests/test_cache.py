@@ -3,14 +3,10 @@
 Focused tests for the cache module's key functions and CacheStore class.
 """
 
-
+import time
 
 import pytest
 
-pytestmark = [pytest.mark.unit]
-import json
-import time
-from pathlib import Path
 from galaxy_merge.cache.keys import (
     provider_cache_key,
     file_cache_key,
@@ -22,6 +18,8 @@ from galaxy_merge.cache.keys import (
     hash_skill,
 )
 from galaxy_merge.cache.store import CacheStore
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestCacheKeys:
@@ -36,7 +34,12 @@ class TestCacheKeys:
         assert key1 != key2
 
     def test_file_cache_key_format(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -46,7 +49,12 @@ class TestCacheKeys:
         assert all(c in "0123456789abcdef" for c in key)
 
     def test_file_cache_key_deterministic(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -55,7 +63,12 @@ class TestCacheKeys:
         assert key1 == key2
 
     def test_file_cache_key_different_inputs_different_key(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -64,7 +77,12 @@ class TestCacheKeys:
         assert key1 != key2
 
     def test_skill_cache_key_deterministic(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -72,7 +90,12 @@ class TestCacheKeys:
         assert len(key) == 32
 
     def test_fusion_cache_key_deterministic(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -80,7 +103,12 @@ class TestCacheKeys:
         assert len(key) == 32
 
     def test_web_cache_key_deterministic(self):
-        from galaxy_merge.cache.keys import set_workroot_hash, set_config_hash, set_safety_policy_hash
+        from galaxy_merge.cache.keys import (
+            set_workroot_hash,
+            set_config_hash,
+            set_safety_policy_hash,
+        )
+
         set_workroot_hash("wr123")
         set_config_hash("cfg456")
         set_safety_policy_hash("safe789")
@@ -90,7 +118,7 @@ class TestCacheKeys:
     def test_hash_messages_deterministic(self):
         messages = [
             {"role": "user", "content": "hello"},
-            {"role": "assistant", "content": "hi there"}
+            {"role": "assistant", "content": "hi there"},
         ]
         h1 = hash_messages(messages)
         h2 = hash_messages(messages)
@@ -116,7 +144,7 @@ class TestCacheKeys:
 class TestCacheStore:
     def test_cache_store_creates_dir(self, tmp_path):
         cache_dir = tmp_path / "cache"
-        store = CacheStore(cache_dir)
+        CacheStore(cache_dir)
         assert cache_dir.exists()
 
     def test_cache_store_get_set(self, tmp_path):

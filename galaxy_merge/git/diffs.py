@@ -2,8 +2,11 @@ import subprocess
 from pathlib import Path
 
 
-def generate_diff(workroot: Path, file_path: str, old_content: str, new_content: str) -> str:
+def generate_diff(
+    workroot: Path, file_path: str, old_content: str, new_content: str
+) -> str:
     import tempfile
+
     with tempfile.NamedTemporaryFile(mode="w", suffix=".old", delete=False) as f:
         f.write(old_content)
         old_path = f.name

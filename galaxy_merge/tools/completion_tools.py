@@ -33,6 +33,7 @@ def make_completion_tools() -> list[tuple[ToolSchema, Any]]:
         expected: str | None = None,
     ) -> ToolResult:
         from pathlib import Path
+
         target = Path(file_path)
         if not target.exists():
             return ToolResult(success=False, error=f"file not found: {file_path}")
@@ -48,12 +49,30 @@ def make_completion_tools() -> list[tuple[ToolSchema, Any]]:
         return ToolResult(success=True, data=result)
 
     return [
-        (ToolSchema("completion.review", "Review a completion result for quality, safety, and criteria", parameters={
-            "result": {"type": "object", "required": True},
-            "criteria": {"type": "array", "items": {"type": "string"}, "default": None},
-        }), completion_review),
-        (ToolSchema("completion.verify", "Verify a file was created/modified as expected", parameters={
-            "file_path": {"type": "string", "required": True},
-            "expected": {"type": "string", "default": None},
-        }), completion_verify),
+        (
+            ToolSchema(
+                "completion.review",
+                "Review a completion result for quality, safety, and criteria",
+                parameters={
+                    "result": {"type": "object", "required": True},
+                    "criteria": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "default": None,
+                    },
+                },
+            ),
+            completion_review,
+        ),
+        (
+            ToolSchema(
+                "completion.verify",
+                "Verify a file was created/modified as expected",
+                parameters={
+                    "file_path": {"type": "string", "required": True},
+                    "expected": {"type": "string", "default": None},
+                },
+            ),
+            completion_verify,
+        ),
     ]

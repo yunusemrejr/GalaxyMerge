@@ -91,18 +91,31 @@ class Compactor:
 
             for e in events:
                 event = e.get("event", "")
-                if event in ("goal_received", "goal_parsed", "tool_call_blocked",
-                             "completion_accepted", "completion_rejected",
-                             "session_completed", "council_completed", "fusion_completed",
-                             "provider_failed", "completion_review_started", "verification_completed"):
+                if event in (
+                    "goal_received",
+                    "goal_parsed",
+                    "tool_call_blocked",
+                    "completion_accepted",
+                    "completion_rejected",
+                    "session_completed",
+                    "council_completed",
+                    "fusion_completed",
+                    "provider_failed",
+                    "completion_review_started",
+                    "verification_completed",
+                ):
                     key_events.append(e)
                 if event == "tool_call_blocked":
                     blocked_actions.append(e.get("tool", e.get("target", "unknown")))
-                    open_risks.append(f"blocked: {e.get('tool', e.get('target', ''))} - {e.get('reason', '')}")
+                    open_risks.append(
+                        f"blocked: {e.get('tool', e.get('target', ''))} - {e.get('reason', '')}"
+                    )
                 if event == "file_changed":
                     changed_files.append(e.get("path", e.get("target", "unknown")))
                 if event in ("tool_call_completed", "tool_call_blocked"):
-                    tool_results.append(f"{e.get('tool', 'unknown')}:{e.get('status', event)}")
+                    tool_results.append(
+                        f"{e.get('tool', 'unknown')}:{e.get('status', event)}"
+                    )
                 if event.startswith("browser_"):
                     browser_evidence.append(event)
                 if event.startswith("web_"):
@@ -119,7 +132,9 @@ class Compactor:
                     verification_status = "passed" if e.get("passed") else "failed"
 
             for e in key_events:
-                compacted.append(f"  [{e['event']}] {e.get('goal', e.get('tool', e.get('task_type', '')))}")
+                compacted.append(
+                    f"  [{e['event']}] {e.get('goal', e.get('tool', e.get('task_type', '')))}"
+                )
 
         if safety_path.exists():
             with open(safety_path) as f:
@@ -138,7 +153,9 @@ class Compactor:
             tool_calls_count = len(tool_calls)
             compacted.append(f"Tool calls: {tool_calls_count}")
             for call in tool_calls[-5:]:
-                tool_results.append(f"{call.get('tool', 'unknown')}:{call.get('status', call.get('success', 'unknown'))}")
+                tool_results.append(
+                    f"{call.get('tool', 'unknown')}:{call.get('status', call.get('success', 'unknown'))}"
+                )
 
         plan_path = session_dir / "goal.json"
         active_goal = state.get("goal", "")
@@ -154,21 +171,41 @@ class Compactor:
                 parsed = goal_data.get("parsed", {})
                 if parsed:
                     compacted.append(f"Task type: {parsed.get('task_type', 'unknown')}")
-                    task_scope = parsed.get("estimated_scope", parsed.get("task_scope", task_scope))
-                completion_criteria = goal_data.get("completion_criteria", parsed.get("completion_criteria", ""))
+                    task_scope = parsed.get(
+                        "estimated_scope", parsed.get("task_scope", task_scope)
+                    )
+                completion_criteria = goal_data.get(
+                    "completion_criteria", parsed.get("completion_criteria", "")
+                )
             except Exception:
                 pass
 
         compacted.append(f"Active goal: {active_goal or 'none'}")
         compacted.append(f"TaskScope: {task_scope}")
-        compacted.append(f"Changed files: {', '.join(sorted(set(changed_files))) or 'none recorded'}")
-        compacted.append(f"Tool results: {', '.join(tool_results[-10:]) or 'none recorded'}")
-        compacted.append(f"Browser evidence: {', '.join(browser_evidence[-10:]) or 'none recorded'}")
-        compacted.append(f"Web evidence: {', '.join(web_evidence[-10:]) or 'none recorded'}")
-        compacted.append(f"Council/fusion state: {', '.join(council_evidence[-10:]) or 'none recorded'}")
-        compacted.append(f"Provider failures: {', '.join(provider_failures[-10:]) or 'none recorded'}")
-        compacted.append(f"Location registry events: {', '.join(location_events[-10:]) or 'none recorded'}")
-        compacted.append(f"Completion criteria: {completion_criteria or 'not recorded'}")
+        compacted.append(
+            f"Changed files: {', '.join(sorted(set(changed_files))) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Tool results: {', '.join(tool_results[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Browser evidence: {', '.join(browser_evidence[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Web evidence: {', '.join(web_evidence[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Council/fusion state: {', '.join(council_evidence[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Provider failures: {', '.join(provider_failures[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Location registry events: {', '.join(location_events[-10:]) or 'none recorded'}"
+        )
+        compacted.append(
+            f"Completion criteria: {completion_criteria or 'not recorded'}"
+        )
 
         if open_risks:
             compacted.append(f"Open risks: {'; '.join(open_risks[:5])}")
@@ -177,7 +214,9 @@ class Compactor:
 
         compacted.append(f"Verification status: {verification_status}")
 
-        compacted.append("Preserved: active goal, current plan/status, WorkRoot, TaskScope, changed files, tool results, browser evidence, web evidence, council outputs, open risks, blocked actions, safety state, location registry, degraded provider state, verification status, completion criteria")
+        compacted.append(
+            "Preserved: active goal, current plan/status, WorkRoot, TaskScope, changed files, tool results, browser evidence, web evidence, council outputs, open risks, blocked actions, safety state, location registry, degraded provider state, verification status, completion criteria"
+        )
 
         compacted_str = self.redactor.redact("\n".join(compacted))
         context_after_tokens = self._estimate_tokens(compacted_str)
@@ -203,9 +242,13 @@ class Compactor:
             return self.compact(session_dir, reason)
         return None
 
-    def _emit_compaction_event(self, session_dir: Path, event: str, session_id: str, **fields: Any) -> None:
+    def _emit_compaction_event(
+        self, session_dir: Path, event: str, session_id: str, **fields: Any
+    ) -> None:
         fields = self._redact_fields(fields)
-        EventLog(session_dir / "events.jsonl").emit(event, session_id=session_id, **fields)
+        EventLog(session_dir / "events.jsonl").emit(
+            event, session_id=session_id, **fields
+        )
         record = {
             "time": datetime.now(timezone.utc).isoformat(),
             "session_id": session_id,

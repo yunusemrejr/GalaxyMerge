@@ -35,7 +35,7 @@ def print_boot_log(
     print(f"WorkRoot: {workroot}", file=sys.stderr)
     print(f"Session ID: {session_id}", file=sys.stderr)
     print(f"GUI: {url}", file=sys.stderr)
-    print(f"Safety: enabled", file=sys.stderr)
+    print("Safety: enabled", file=sys.stderr)
 
     if provider_stats:
         loaded = provider_stats.get("loaded", 0)
@@ -50,8 +50,11 @@ def print_boot_log(
                 if os.environ.get(var, ""):
                     available += 1
         unavailable = loaded - available
-    print(f"Providers: {loaded} loaded, {available} available, {unavailable} unavailable", file=sys.stderr)
-    print(f"Browser: isolated profile ready", file=sys.stderr)
+    print(
+        f"Providers: {loaded} loaded, {available} available, {unavailable} unavailable",
+        file=sys.stderr,
+    )
+    print("Browser: isolated profile ready", file=sys.stderr)
 
 
 def shutdown(session: Session) -> None:
@@ -91,7 +94,7 @@ def run_doctor() -> int:
 
     # --- Virtual environment ---
     print("--- Virtual Environment ---")
-    in_venv = hasattr(sys, 'prefix') and sys.prefix != sys.base_prefix
+    in_venv = hasattr(sys, "prefix") and sys.prefix != sys.base_prefix
     _check("Running in venv", in_venv, sys.prefix if in_venv else "system Python")
     print()
 
@@ -101,12 +104,20 @@ def run_doctor() -> int:
         "pyyaml": "yaml",
         "beautifulsoup4": "bs4",
     }
-    required = ["fastapi", "uvicorn", "pydantic", "httpx", "websockets", "pyyaml", "requests"]
+    required = [
+        "fastapi",
+        "uvicorn",
+        "pydantic",
+        "httpx",
+        "websockets",
+        "pyyaml",
+        "requests",
+    ]
     for pkg in required:
         try:
             import_name = _IMPORT_NAMES.get(pkg, pkg)
             mod = __import__(import_name)
-            ver = getattr(mod, '__version__', '?')
+            ver = getattr(mod, "__version__", "?")
             _check(pkg, True, ver)
         except ImportError:
             _check(pkg, False, critical=(pkg in ("fastapi", "uvicorn", "pydantic")))
@@ -121,7 +132,7 @@ def run_doctor() -> int:
         try:
             import_name = _IMPORT_NAMES.get(pkg, pkg)
             mod = __import__(import_name)
-            ver = getattr(mod, '__version__', '?')
+            ver = getattr(mod, "__version__", "?")
             _check(pkg, True, ver)
         except ImportError:
             _check(pkg, False, "optional")
@@ -138,13 +149,14 @@ def run_doctor() -> int:
     bin_in_path = str(bin_dir) in path_dirs
     _check("~/.local/bin in PATH", bin_in_path)
     if not bin_in_path and bin_dir.exists():
-        print("    Add: export PATH=\"$HOME/.local/bin:$PATH\"")
+        print('    Add: export PATH="$HOME/.local/bin:$PATH"')
     print()
 
     # --- Config files ---
     print("--- Config Files ---")
     try:
         import galaxy_merge
+
         install_dir = Path(galaxy_merge.__file__).resolve().parent.parent
     except Exception:
         install_dir = Path.cwd()
@@ -173,7 +185,9 @@ def run_doctor() -> int:
             _check(var, True, "set")
         else:
             _check(var, False, "not set")
-    print(f"  Summary: {available_count}/{len(PROVIDER_ENV_VARS)} provider keys available")
+    print(
+        f"  Summary: {available_count}/{len(PROVIDER_ENV_VARS)} provider keys available"
+    )
     print()
 
     # --- Secret safety ---
@@ -183,7 +197,10 @@ def run_doctor() -> int:
         content = gitignore.read_text()
         _check(".gm/ in .gitignore", ".gm/" in content)
         _check(".env in .gitignore", ".env" in content)
-        _check("providers.json in .gitignore", "providers.json" in content or "**/providers.json" in content)
+        _check(
+            "providers.json in .gitignore",
+            "providers.json" in content or "**/providers.json" in content,
+        )
     else:
         _check(".gitignore exists", False)
     print()

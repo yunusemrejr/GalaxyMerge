@@ -44,7 +44,10 @@ class _OfflineSocket:
 
 def _offline_socket_enabled() -> bool:
     """True when tests/sandboxes should proceed without real network sockets."""
-    return bool(os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("GMLAUNCHER_OFFLINE", "").lower() in {"1", "true", "yes"})
+    return bool(
+        os.environ.get("PYTEST_CURRENT_TEST")
+        or os.environ.get("GMLAUNCHER_OFFLINE", "").lower() in {"1", "true", "yes"}
+    )
 
 
 def _read_offline_registry() -> dict[str, Any]:
@@ -83,7 +86,8 @@ def _sweep_offline_registry(registry: dict[str, Any]) -> None:
     stale = [
         port
         for port, entry in list(registry.items())
-        if isinstance(entry, dict) and now - int(entry.get("t", 0)) > _OFFLINE_TTL_SECONDS
+        if isinstance(entry, dict)
+        and now - int(entry.get("t", 0)) > _OFFLINE_TTL_SECONDS
     ]
     for port in stale:
         registry.pop(port, None)
@@ -102,10 +106,20 @@ def _allocate_offline_port(port: int) -> int:
             _sweep_offline_registry(registry)
 
             desired = port if port > 0 else None
-            candidates = [desired] if desired else list(range(_OFFLINE_RANGE_START, _OFFLINE_RANGE_START + _OFFLINE_RANGE_SIZE))
+            candidates = (
+                [desired]
+                if desired
+                else list(
+                    range(
+                        _OFFLINE_RANGE_START, _OFFLINE_RANGE_START + _OFFLINE_RANGE_SIZE
+                    )
+                )
+            )
             for candidate in candidates:
                 candidate_key = str(candidate)
-                in_use = isinstance(registry.get(candidate_key), dict) and bool(registry[candidate_key].get("active", False))
+                in_use = isinstance(registry.get(candidate_key), dict) and bool(
+                    registry[candidate_key].get("active", False)
+                )
                 if in_use:
                     if desired is not None:
                         break

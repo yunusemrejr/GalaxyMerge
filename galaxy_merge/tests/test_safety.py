@@ -1,16 +1,14 @@
-
-
-import tempfile
 from pathlib import Path
+
 import pytest
 
-pytestmark = [pytest.mark.unit]
-
-from galaxy_merge.safety.path_policy import PathPolicy
-from galaxy_merge.safety.command_policy import CommandPolicy
-from galaxy_merge.safety.self_protection import SelfProtectionPolicy
-from galaxy_merge.safety.credential_policy import CredentialPolicy
 from galaxy_merge.safety.audit import SafetyAudit
+from galaxy_merge.safety.command_policy import CommandPolicy
+from galaxy_merge.safety.credential_policy import CredentialPolicy
+from galaxy_merge.safety.path_policy import PathPolicy
+from galaxy_merge.safety.self_protection import SelfProtectionPolicy
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestPathPolicy:

@@ -34,7 +34,7 @@ class GoalEngine:
         }
 
     def _extract_files(self, goal: str) -> list[str]:
-        paths = re.findall(r'[\w/.-]+\.\w+', goal)
+        paths = re.findall(r"[\w/.-]+\.\w+", goal)
         return [p for p in paths if "/" in p or "." in p]
 
     def _estimate_scope(self, goal: str) -> str:

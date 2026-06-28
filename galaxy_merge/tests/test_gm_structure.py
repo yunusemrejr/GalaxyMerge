@@ -1,26 +1,30 @@
-"""
-Validate that .gm/ project folder matches the full spec structure.
-"""
+"""Validate that .gm/ project folder matches the full spec structure."""
 
 import json
 from pathlib import Path
 from unittest.mock import patch
+
 import pytest
+
+from galaxy_merge.core.session import (
+    init_gm_dir,
+    detect_workroot,
+    _validate_project_json,
+)
 
 pytestmark = [pytest.mark.unit]
 
 
-from galaxy_merge.core.session import init_gm_dir, detect_workroot, _validate_project_json
-
-
 async def _nt(gm_dir):
     from galaxy_merge.tools.notes_tools import make_notes_tools
+
     return {schema.name: handler for schema, handler in make_notes_tools(gm_dir)}
 
 
 # =============================================================================
 # .gm/ directory creation
 # =============================================================================
+
 
 class TestInitGmDirStructure:
     def test_init_creates_dot_gm(self, tmp_path):
@@ -56,40 +60,63 @@ class TestInitGmDirStructure:
         data2 = json.loads(path.read_text())
         assert data2["language_hints"] == ["python"]
 
-    @pytest.mark.parametrize("subpath", [
-        "notes", "notes/history", "notes/.trash",
-        "memory", "sessions",
-        "indexes", "indexes/embeddings",
-        "cache/provider", "cache/file_summaries", "cache/skill_matches",
-        "cache/fusion", "cache/command_results",
-        "cache/web_search", "cache/browser_pages", "cache/github_scans",
-        "web", "browser/profiles", "browser/sessions", "browser/screenshots",
-        "locations", "github/scans", "github/issues", "github/pull_requests",
-        "logs", "safety", "git/patchsets",
-    ])
+    @pytest.mark.parametrize(
+        "subpath",
+        [
+            "notes",
+            "notes/history",
+            "notes/.trash",
+            "memory",
+            "sessions",
+            "indexes",
+            "indexes/embeddings",
+            "cache/provider",
+            "cache/file_summaries",
+            "cache/skill_matches",
+            "cache/fusion",
+            "cache/command_results",
+            "cache/web_search",
+            "cache/browser_pages",
+            "cache/github_scans",
+            "web",
+            "browser/profiles",
+            "browser/sessions",
+            "browser/screenshots",
+            "locations",
+            "github/scans",
+            "github/issues",
+            "github/pull_requests",
+            "logs",
+            "safety",
+            "git/patchsets",
+        ],
+    )
     def test_subdir_exists(self, tmp_path, subpath):
         init_gm_dir(tmp_path)
         assert (tmp_path / ".gm" / subpath).is_dir()
 
-    @pytest.mark.parametrize("filepath", [
-        "README.md",
-        "project.json",
-        "notes/index.json",
-        "safety/policy.snapshot.json",
-        "safety/blocked_actions.jsonl",
-        "safety/allowed_commands.json",
-        "safety/protected_paths.json",
-        "git/checkpoints.jsonl",
-        "web/searches.jsonl",
-        "web/fetched_pages.jsonl",
-        "web/wikipedia.jsonl",
-        "web/duckduckgo.jsonl",
-        "web/curl_fetches.jsonl",
-        "browser/console_logs.jsonl",
-        "browser/network_logs.jsonl",
-        "browser/page_errors.jsonl",
-        "github/repos.jsonl",
-    ])
+    @pytest.mark.parametrize(
+        "filepath",
+        [
+            "README.md",
+            "project.json",
+            "notes/index.json",
+            "safety/policy.snapshot.json",
+            "safety/blocked_actions.jsonl",
+            "safety/allowed_commands.json",
+            "safety/protected_paths.json",
+            "git/checkpoints.jsonl",
+            "web/searches.jsonl",
+            "web/fetched_pages.jsonl",
+            "web/wikipedia.jsonl",
+            "web/duckduckgo.jsonl",
+            "web/curl_fetches.jsonl",
+            "browser/console_logs.jsonl",
+            "browser/network_logs.jsonl",
+            "browser/page_errors.jsonl",
+            "github/repos.jsonl",
+        ],
+    )
     def test_file_exists(self, tmp_path, filepath):
         init_gm_dir(tmp_path)
         assert (tmp_path / ".gm" / filepath).exists()
@@ -102,18 +129,24 @@ class TestInitGmDirStructure:
 
     def test_safety_policy_schema(self, tmp_path):
         init_gm_dir(tmp_path)
-        data = json.loads((tmp_path / ".gm" / "safety" / "policy.snapshot.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "safety" / "policy.snapshot.json").read_text()
+        )
         assert data["schema_version"] == 1
         assert data["policy"] == "default"
 
     def test_allowed_commands_schema(self, tmp_path):
         init_gm_dir(tmp_path)
-        data = json.loads((tmp_path / ".gm" / "safety" / "allowed_commands.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "safety" / "allowed_commands.json").read_text()
+        )
         assert isinstance(data["allowed_commands"], list)
 
     def test_protected_paths_schema(self, tmp_path):
         init_gm_dir(tmp_path)
-        data = json.loads((tmp_path / ".gm" / "safety" / "protected_paths.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "safety" / "protected_paths.json").read_text()
+        )
         assert len(data["protected_paths"]) >= 2
 
 
@@ -156,6 +189,7 @@ class TestProjectJsonValidation:
 class TestSessionIsolation:
     def test_session_creates_subdirs(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.save_state()
@@ -172,6 +206,7 @@ class TestSessionIsolation:
 
     def test_sessions_are_isolated(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s1 = Session(tmp_path)
         s2 = Session(tmp_path)
@@ -183,36 +218,48 @@ class TestSessionIsolation:
 
     def test_goal_persisted(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.set_goal("test goal")
-        data = json.loads((tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text()
+        )
         assert data["goal"] == "test goal"
         assert data["status"] == "understanding"
 
     def test_goal_json_exists(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.set_goal("test goal")
-        data = json.loads((tmp_path / ".gm" / "sessions" / s.session_id / "goal.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "sessions" / s.session_id / "goal.json").read_text()
+        )
         assert data["goal"] == "test goal"
 
     def test_completed(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.mark_completed()
-        data = json.loads((tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text()
+        )
         assert data["status"] == "complete"
         assert data["active"] is False
 
     def test_crashed(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.mark_crashed()
-        data = json.loads((tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text())
+        data = json.loads(
+            (tmp_path / ".gm" / "sessions" / s.session_id / "state.json").read_text()
+        )
         assert data["status"] == "crashed"
         assert data["active"] is False
 
@@ -234,7 +281,9 @@ class TestWorkrootDetection:
             Path("/bin"),
             Path("/sbin"),
             Path("/root"),
-            Path("/tmp"),  # not a hard deny in this implementation, but keep as baseline control
+            Path(
+                "/tmp"
+            ),  # not a hard deny in this implementation, but keep as baseline control
         ]
         for d in blocked_dirs:
             if str(d).startswith("/tmp"):
@@ -379,11 +428,17 @@ class TestNotesCrud:
 class TestEventLogging:
     def test_events_jsonl_format(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.event_log.emit("first", session_id=s.session_id)
         s.event_log.emit("second", session_id=s.session_id, detail="info")
-        lines = (tmp_path / ".gm" / "sessions" / s.session_id / "events.jsonl").read_text().strip().splitlines()
+        lines = (
+            (tmp_path / ".gm" / "sessions" / s.session_id / "events.jsonl")
+            .read_text()
+            .strip()
+            .splitlines()
+        )
         assert len(lines) == 2
         last = json.loads(lines[-1])
         assert last["event"] == "second"
@@ -391,6 +446,7 @@ class TestEventLogging:
 
     def test_session_has_all_log_files(self, tmp_path):
         from galaxy_merge.core.session import Session
+
         init_gm_dir(tmp_path)
         s = Session(tmp_path)
         s.save_state()

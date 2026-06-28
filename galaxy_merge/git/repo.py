@@ -47,10 +47,14 @@ class GitRepo:
         return result.get("stdout", "").strip()
 
     def log(self, count: int = 10) -> list[str]:
-        result = self._run([
-            "log", f"--max-count={count}",
-            "--oneline", "--decorate",
-        ])
+        result = self._run(
+            [
+                "log",
+                f"--max-count={count}",
+                "--oneline",
+                "--decorate",
+            ]
+        )
         return result.get("stdout", "").splitlines() if result.get("stdout") else []
 
     def is_clean(self) -> bool:

@@ -1,13 +1,15 @@
-
-
 import pytest
 
-pytestmark = [pytest.mark.unit]
-
-from galaxy_merge.fusion.synthesizer import Synthesizer
-from galaxy_merge.fusion.scoring import score_finding, rank_findings, has_high_severity_blockers
-from galaxy_merge.fusion.reviewer import review_fusion_result
 from galaxy_merge.core.goal import GoalEngine
+from galaxy_merge.fusion.reviewer import review_fusion_result
+from galaxy_merge.fusion.scoring import (
+    score_finding,
+    rank_findings,
+    has_high_severity_blockers,
+)
+from galaxy_merge.fusion.synthesizer import Synthesizer
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestSynthesizer:
@@ -20,14 +22,21 @@ class TestSynthesizer:
     def test_fuse_with_implementer(self):
         syn = Synthesizer()
         results = {
-            "implementer": [{
-                "role": "implementer",
-                "parsed": {
-                    "changes": [
-                        {"file": "src/main.py", "action": "edit", "diff": "- old\n+ new", "rationale": "fix bug"}
-                    ]
+            "implementer": [
+                {
+                    "role": "implementer",
+                    "parsed": {
+                        "changes": [
+                            {
+                                "file": "src/main.py",
+                                "action": "edit",
+                                "diff": "- old\n+ new",
+                                "rationale": "fix bug",
+                            }
+                        ]
+                    },
                 }
-            }]
+            ]
         }
         result = syn.fuse(results)
         assert result["changes_proposed"] == 1

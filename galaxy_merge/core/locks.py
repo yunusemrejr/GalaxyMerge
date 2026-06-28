@@ -183,7 +183,10 @@ class _LockContext:
 # Higher-level helpers
 # ------------------------------------------------------------------
 
-def locked_read_json(path: Path, lock_manager: LockManager, resource: str) -> dict[str, Any]:
+
+def locked_read_json(
+    path: Path, lock_manager: LockManager, resource: str
+) -> dict[str, Any]:
     """Read a JSON file under a lock."""
     with lock_manager.locked(resource):
         if path.exists():
@@ -191,7 +194,9 @@ def locked_read_json(path: Path, lock_manager: LockManager, resource: str) -> di
         return {}
 
 
-def locked_write_json(path: Path, data: dict[str, Any], lock_manager: LockManager, resource: str) -> None:
+def locked_write_json(
+    path: Path, data: dict[str, Any], lock_manager: LockManager, resource: str
+) -> None:
     """Write a JSON file under a lock (atomic temp+rename)."""
     with lock_manager.locked(resource):
         tmp = path.with_suffix(".tmp")
@@ -267,7 +272,9 @@ def atomic_append(path: Path, line: str, *, _nested_lock: bool = False) -> None:
             pass
 
 
-def atomic_write(path: Path, content: str | bytes, *, _nested_lock: bool = False) -> None:
+def atomic_write(
+    path: Path, content: str | bytes, *, _nested_lock: bool = False
+) -> None:
     """Write *content* to *path* atomically (temp + rename).
 
     Uses fcntl.flock on a sidecar ``.lock`` file for cross-process
@@ -300,9 +307,6 @@ def atomic_write(path: Path, content: str | bytes, *, _nested_lock: bool = False
             os.close(fd)
         except OSError:
             pass
-
-
-
 
 
 def _safe_name(resource: str) -> str:

@@ -1,12 +1,8 @@
-
-
-import json
 import pytest
 
-pytestmark = [pytest.mark.unit]
-from pathlib import Path
-
 from galaxy_merge.core.config import load_json, save_json
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestConfig:

@@ -5,7 +5,6 @@ from __future__ import annotations
 import asyncio
 import json
 import os
-import tempfile
 import time
 from contextlib import contextmanager
 from pathlib import Path
@@ -16,17 +15,23 @@ from typing import Any
 # Fake Provider Adapter
 # ---------------------------------------------------------------------------
 
+
 class FakeProvider:
     """Minimal provider that returns canned responses without network."""
 
-    def __init__(self, provider_id: str = "fake", responses: dict[str, Any] | None = None):
+    def __init__(
+        self, provider_id: str = "fake", responses: dict[str, Any] | None = None
+    ):
         self.provider_id = provider_id
         self.config: dict[str, Any] = {"type": "mock", "enabled": True}
         self.available = True
         self.warning: str | None = None
         self.healthy = True
         self._responses = responses or {}
-        self._default_response = {"success": True, "content": '{"steps": [], "completion_criteria": []}'}
+        self._default_response = {
+            "success": True,
+            "content": '{"steps": [], "completion_criteria": []}',
+        }
         self.call_log: list[dict[str, Any]] = []
 
     def set_response(self, role: str, response: dict[str, Any]) -> None:
@@ -48,7 +53,9 @@ class FakeProvider:
         **kwargs: Any,
     ) -> dict[str, Any]:
         role = self._extract_role(messages)
-        self.call_log.append({"role": role, "model": model, "provider": self.provider_id})
+        self.call_log.append(
+            {"role": role, "model": model, "provider": self.provider_id}
+        )
         return dict(self._responses.get(role, self._default_response))
 
     @staticmethod
@@ -56,7 +63,15 @@ class FakeProvider:
         for msg in messages:
             if msg.get("role") == "system":
                 content = msg.get("content", "")
-                for r in ("planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"):
+                for r in (
+                    "planner",
+                    "scout",
+                    "implementer",
+                    "reviewer",
+                    "skeptic",
+                    "cheap_verifier",
+                    "synthesizer",
+                ):
                     if r in content:
                         return r
         return ""
@@ -108,6 +123,7 @@ class FakeProviderRegistry:
 # Fake Browser Manager
 # ---------------------------------------------------------------------------
 
+
 class FakeBrowserManager:
     """Browser manager that never launches a real browser."""
 
@@ -137,6 +153,7 @@ class FakeBrowserManager:
 # ---------------------------------------------------------------------------
 # Fake Event Bus / Event Log
 # ---------------------------------------------------------------------------
+
 
 class FakeEventBus:
     """In-memory event bus for testing event-driven code."""
@@ -168,6 +185,7 @@ class FakeEventBus:
 # Fake Clock
 # ---------------------------------------------------------------------------
 
+
 class FakeClock:
     """Deterministic clock for testing time-dependent logic."""
 
@@ -187,6 +205,7 @@ class FakeClock:
 # ---------------------------------------------------------------------------
 # Project / .gm / Config Factories
 # ---------------------------------------------------------------------------
+
 
 def make_fake_project(tmp_path: Path, name: str = "fake_project") -> Path:
     """Create a minimal fake project directory with a few files."""
@@ -208,10 +227,14 @@ def make_fake_gm_dir(tmp_path: Path) -> Path:
     (gm_dir / "notes").mkdir(exist_ok=True)
     (gm_dir / "sessions").mkdir(exist_ok=True)
     (gm_dir / "memory").mkdir(exist_ok=True)
-    (gm_dir / "project.json").write_text(json.dumps({
-        "name": "test_project",
-        "created": "2025-01-01T00:00:00Z",
-    }))
+    (gm_dir / "project.json").write_text(
+        json.dumps(
+            {
+                "name": "test_project",
+                "created": "2025-01-01T00:00:00Z",
+            }
+        )
+    )
     return gm_dir
 
 
@@ -247,8 +270,22 @@ def make_fake_config(
                     "model": "fake-v1",
                     "enabled": True,
                     "context_window": 32000,
-                    "strengths": ["planning", "implementation", "synthesis", "review", "fast_scan"],
-                    "roles": ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"],
+                    "strengths": [
+                        "planning",
+                        "implementation",
+                        "synthesis",
+                        "review",
+                        "fast_scan",
+                    ],
+                    "roles": [
+                        "planner",
+                        "scout",
+                        "implementer",
+                        "reviewer",
+                        "skeptic",
+                        "cheap_verifier",
+                        "synthesizer",
+                    ],
                 }
             }
         }
@@ -261,13 +298,38 @@ def make_fake_config(
             "retry_count": 1,
             "retry_backoff": 0,
             "roles": {
-                "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
-                "scout": {"required": True, "model_selector": {"role": "scout", "cost_policy": "cheap"}},
-                "implementer": {"required": True, "model_selector": {"role": "implementer", "cost_policy": "quality"}},
-                "reviewer": {"required": True, "model_selector": {"role": "reviewer", "cost_policy": "balanced"}},
-                "skeptic": {"required": True, "model_selector": {"role": "skeptic", "cost_policy": "balanced"}},
-                "cheap_verifier": {"required": True, "count": 1, "model_selector": {"role": "cheap_verifier", "cost_policy": "cheap"}},
-                "synthesizer": {"required": True, "model_selector": {"role": "synthesizer", "cost_policy": "quality"}},
+                "planner": {
+                    "required": True,
+                    "model_selector": {"role": "planner", "cost_policy": "balanced"},
+                },
+                "scout": {
+                    "required": True,
+                    "model_selector": {"role": "scout", "cost_policy": "cheap"},
+                },
+                "implementer": {
+                    "required": True,
+                    "model_selector": {"role": "implementer", "cost_policy": "quality"},
+                },
+                "reviewer": {
+                    "required": True,
+                    "model_selector": {"role": "reviewer", "cost_policy": "balanced"},
+                },
+                "skeptic": {
+                    "required": True,
+                    "model_selector": {"role": "skeptic", "cost_policy": "balanced"},
+                },
+                "cheap_verifier": {
+                    "required": True,
+                    "count": 1,
+                    "model_selector": {
+                        "role": "cheap_verifier",
+                        "cost_policy": "cheap",
+                    },
+                },
+                "synthesizer": {
+                    "required": True,
+                    "model_selector": {"role": "synthesizer", "cost_policy": "quality"},
+                },
             },
         }
     (config_dir / "fusion.json").write_text(json.dumps(fusion))
@@ -278,6 +340,7 @@ def make_fake_config(
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
 
 @contextmanager
 def temp_env(**env: str):

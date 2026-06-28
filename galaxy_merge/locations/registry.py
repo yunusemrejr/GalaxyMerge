@@ -15,7 +15,12 @@ class LocationRegistry:
     def _load(self) -> dict[str, Any]:
         if self.path.exists():
             return json.loads(self.path.read_text())
-        return {"schema_version": 1, "workroot": "", "remote_targets": [], "protected_locations": []}
+        return {
+            "schema_version": 1,
+            "workroot": "",
+            "remote_targets": [],
+            "protected_locations": [],
+        }
 
     def _save(self) -> None:
         atomic_write(self.path, json.dumps(self._registry, indent=2, default=str))
@@ -28,10 +33,14 @@ class LocationRegistry:
         git_dir = workroot / ".git"
         if git_dir.exists():
             import subprocess
+
             try:
                 result = subprocess.run(
                     ["git", "remote", "-v"],
-                    cwd=str(workroot), capture_output=True, text=True, timeout=10,
+                    cwd=str(workroot),
+                    capture_output=True,
+                    text=True,
+                    timeout=10,
                 )
                 remotes = {}
                 for line in result.stdout.splitlines():
@@ -42,7 +51,10 @@ class LocationRegistry:
                 self._registry["git"] = {"repo_root": str(workroot), "remotes": remotes}
                 branch = subprocess.run(
                     ["git", "branch", "--show-current"],
-                    cwd=str(workroot), capture_output=True, text=True, timeout=5,
+                    cwd=str(workroot),
+                    capture_output=True,
+                    text=True,
+                    timeout=5,
                 )
                 self._registry["git"]["current_branch"] = branch.stdout.strip()
             except Exception:
@@ -50,7 +62,14 @@ class LocationRegistry:
 
         self._save()
 
-    def register_remote(self, remote_id: str, target_type: str, host: str, path: str, classification: str) -> None:
+    def register_remote(
+        self,
+        remote_id: str,
+        target_type: str,
+        host: str,
+        path: str,
+        classification: str,
+    ) -> None:
         entry = {
             "id": remote_id,
             "type": target_type,
@@ -60,7 +79,11 @@ class LocationRegistry:
             "write_policy": "blocked_by_default",
             "registered_at": datetime.now(timezone.utc).isoformat(),
         }
-        existing = [r for r in self._registry.get("remote_targets", []) if r.get("id") == remote_id]
+        existing = [
+            r
+            for r in self._registry.get("remote_targets", [])
+            if r.get("id") == remote_id
+        ]
         if existing:
             existing[0].update(entry)
         else:

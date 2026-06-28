@@ -1,21 +1,19 @@
-
-
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.integration]
-
+from galaxy_merge.app.launcher import Launcher
 from galaxy_merge.app.server import (
     SessionServer,
     _build_tree,
     build_council_event_summary,
     build_locations_payload,
     build_logs_payload,
-    build_notes_payload,
 )
-from galaxy_merge.app.launcher import Launcher
+from galaxy_merge.app.payloads import build_notes_payload
 from galaxy_merge.core.session import Session, init_gm_dir
+
+pytestmark = [pytest.mark.integration]
 
 
 @pytest.fixture
@@ -57,7 +55,9 @@ class TestSessionServer:
 
 
 class TestLauncher:
-    def test_launcher_opens_browser_by_default(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_launcher_opens_browser_by_default(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         opened = []
 
         import pathlib
@@ -71,7 +71,11 @@ class TestLauncher:
                 pass
 
         def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
-            return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}
+            return {
+                "url": "http://127.0.0.1:43210/",
+                "port": 43210,
+                "server": FakeServer(),
+            }
 
         monkeypatch.setattr("galaxy_merge.app.launcher.start_server", fake_start_server)
         monkeypatch.setattr("galaxy_merge.app.launcher.open_browser", opened.append)
@@ -81,7 +85,9 @@ class TestLauncher:
         assert result == 0
         assert opened == ["http://127.0.0.1:43210/"]
 
-    def test_launcher_respects_no_browser(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_launcher_respects_no_browser(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         opened = []
 
         import pathlib
@@ -95,7 +101,11 @@ class TestLauncher:
                 pass
 
         def fake_start_server(session: Session, port: int = 0) -> dict[str, object]:
-            return {"url": "http://127.0.0.1:43210/", "port": 43210, "server": FakeServer()}
+            return {
+                "url": "http://127.0.0.1:43210/",
+                "port": 43210,
+                "server": FakeServer(),
+            }
 
         monkeypatch.setattr("galaxy_merge.app.launcher.start_server", fake_start_server)
         monkeypatch.setattr("galaxy_merge.app.launcher.open_browser", opened.append)
@@ -125,7 +135,9 @@ class TestPayloadBuilders:
         assert data["total"] == 20
         assert data["truncated"] is True
 
-    def test_notes_payload_is_structured_and_legacy_compatible(self, tmp_path: Path) -> None:
+    def test_notes_payload_is_structured_and_legacy_compatible(
+        self, tmp_path: Path
+    ) -> None:
         notes_dir = tmp_path / "notes"
         notes_dir.mkdir()
         (notes_dir / "test.md").write_text("hello")
@@ -140,7 +152,9 @@ class TestPayloadBuilders:
 
         assert data["workroot"] == str(session.workroot)
 
-    def test_council_payload_summarizes_and_redacts_provider_failures(self, tmp_path: Path) -> None:
+    def test_council_payload_summarizes_and_redacts_provider_failures(
+        self, tmp_path: Path
+    ) -> None:
         events = [
             {
                 "time": "2026-06-28T10:00:00+00:00",

@@ -12,12 +12,23 @@ def make_git_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
     def _run_git(args: list[str]) -> dict[str, Any]:
         import os
         import subprocess
+
         try:
             safe_env = os.environ.copy()
             redact_keys = [
-                "API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL",
-                "OPENAI", "ANTHROPIC", "DEEPSEEK", "GEMINI",
-                "MINIMAX", "STEPFUN", "STREAMLAKE", "KIMI",
+                "API_KEY",
+                "TOKEN",
+                "SECRET",
+                "PASSWORD",
+                "CREDENTIAL",
+                "OPENAI",
+                "ANTHROPIC",
+                "DEEPSEEK",
+                "GEMINI",
+                "MINIMAX",
+                "STEPFUN",
+                "STREAMLAKE",
+                "KIMI",
             ]
             for key in list(safe_env.keys()):
                 for rk in redact_keys:
@@ -50,10 +61,13 @@ def make_git_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
         result = _run_git(["status", "--short"])
         if result["exit_code"] != 0:
             return ToolResult(success=False, error=result["stderr"])
-        return ToolResult(success=True, data={
-            "status": result["stdout"].splitlines(),
-            "is_clean": len(result["stdout"].strip()) == 0,
-        })
+        return ToolResult(
+            success=True,
+            data={
+                "status": result["stdout"].splitlines(),
+                "is_clean": len(result["stdout"].strip()) == 0,
+            },
+        )
 
     async def git_diff(staged: bool = False) -> ToolResult:
         args = ["diff"]
@@ -62,10 +76,13 @@ def make_git_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
         result = _run_git(args)
         if result["exit_code"] != 0:
             return ToolResult(success=False, error=result["stderr"])
-        return ToolResult(success=True, data={
-            "diff": result["stdout"],
-            "has_changes": len(result["stdout"].strip()) > 0,
-        })
+        return ToolResult(
+            success=True,
+            data={
+                "diff": result["stdout"],
+                "has_changes": len(result["stdout"].strip()) > 0,
+            },
+        )
 
     async def git_branch() -> ToolResult:
         result = _run_git(["branch", "--show-current"])
@@ -74,38 +91,61 @@ def make_git_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
         return ToolResult(success=True, data={"branch": result["stdout"].strip()})
 
     async def git_log(count: int = 10) -> ToolResult:
-        result = _run_git([
-            "log", f"--max-count={count}",
-            "--oneline", "--decorate",
-        ])
+        result = _run_git(
+            [
+                "log",
+                f"--max-count={count}",
+                "--oneline",
+                "--decorate",
+            ]
+        )
         if result["exit_code"] != 0:
             return ToolResult(success=False, error=result["stderr"])
-        return ToolResult(success=True, data={
-            "log": result["stdout"].splitlines(),
-        })
+        return ToolResult(
+            success=True,
+            data={
+                "log": result["stdout"].splitlines(),
+            },
+        )
 
-    tools.append((
-        ToolSchema("git.status", "Show git working tree status"),
-        git_status,
-    ))
+    tools.append(
+        (
+            ToolSchema("git.status", "Show git working tree status"),
+            git_status,
+        )
+    )
 
-    tools.append((
-        ToolSchema("git.diff", "Show git diff", parameters={
-            "staged": {"type": "boolean", "default": False},
-        }),
-        git_diff,
-    ))
+    tools.append(
+        (
+            ToolSchema(
+                "git.diff",
+                "Show git diff",
+                parameters={
+                    "staged": {"type": "boolean", "default": False},
+                },
+            ),
+            git_diff,
+        )
+    )
 
-    tools.append((
-        ToolSchema("git.branch", "Show current git branch"),
-        git_branch,
-    ))
+    tools.append(
+        (
+            ToolSchema("git.branch", "Show current git branch"),
+            git_branch,
+        )
+    )
 
-    tools.append((
-        ToolSchema("git.log", "Show recent git log", parameters={
-            "count": {"type": "integer", "default": 10},
-        }),
-        git_log,
-    ))
+    tools.append(
+        (
+            ToolSchema(
+                "git.log",
+                "Show recent git log",
+                parameters={
+                    "count": {"type": "integer", "default": 10},
+                },
+            ),
+            git_log,
+        )
+    )
 
     return tools

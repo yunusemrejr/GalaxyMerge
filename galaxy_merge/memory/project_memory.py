@@ -4,14 +4,29 @@ from typing import Any
 from galaxy_merge.memory.store import MemoryStore
 
 PROMOTABLE_PATTERNS = [
-    "test command", "test suite", "npm test", "pytest", "cargo test",
-    "build command", "architecture", "dependency", "config",
-    "convention", "rule", "preference",
+    "test command",
+    "test suite",
+    "npm test",
+    "pytest",
+    "cargo test",
+    "build command",
+    "architecture",
+    "dependency",
+    "config",
+    "convention",
+    "rule",
+    "preference",
 ]
 
 NON_PROMOTABLE_PATTERNS = [
-    "debug", "print(", "console.log", "temp", "temporary",
-    "random", "hallucination", "wrong",
+    "debug",
+    "print(",
+    "console.log",
+    "temp",
+    "temporary",
+    "random",
+    "hallucination",
+    "wrong",
 ]
 
 
@@ -26,7 +41,9 @@ class ProjectMemory:
         self.store.append("known_failures", {"error": error, "context": context})
 
     def record_fix(self, issue: str, fix: str, verified: bool = False) -> None:
-        self.store.append("verified_fixes", {"issue": issue, "fix": fix, "verified": verified})
+        self.store.append(
+            "verified_fixes", {"issue": issue, "fix": fix, "verified": verified}
+        )
 
     def record_lesson(self, lesson: str, category: str = "general") -> None:
         self.store.append("lessons", {"lesson": lesson, "category": category})
@@ -69,7 +86,10 @@ class ProjectMemory:
     def promote_from_session(self, session_entries: list[dict[str, Any]]) -> int:
         promoted = 0
         for entry in session_entries:
-            if entry.get("type") == "completion" and entry.get("content", {}).get("status") == "complete":
+            if (
+                entry.get("type") == "completion"
+                and entry.get("content", {}).get("status") == "complete"
+            ):
                 self.record_fact("completed a goal successfully", source="session")
                 promoted += 1
             if entry.get("type") == "goal":

@@ -85,10 +85,16 @@ def _read_limited_text(response: requests.Response, max_bytes: int) -> tuple[str
     return b"".join(chunks).decode(encoding, errors="replace"), truncated
 
 
-def fetch_page(url: str, timeout: int = 30, max_bytes: int = MAX_FETCH_BYTES) -> dict[str, Any]:
+def fetch_page(
+    url: str, timeout: int = 30, max_bytes: int = MAX_FETCH_BYTES
+) -> dict[str, Any]:
     scheme = urlparse(url).scheme.lower()
     if scheme not in {"http", "https"}:
-        return {"url": url, "error": f"unsupported URL scheme: {scheme or 'missing'}", "status": 0}
+        return {
+            "url": url,
+            "error": f"unsupported URL scheme: {scheme or 'missing'}",
+            "status": 0,
+        }
 
     headers = {
         "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) GalaxyMerge/0.1",
@@ -111,11 +117,26 @@ def fetch_page(url: str, timeout: int = 30, max_bytes: int = MAX_FETCH_BYTES) ->
 
             if content_type in HTML_CONTENT_TYPES:
                 soup = BeautifulSoup(body, "lxml")
-                for tag in soup(["script", "style", "nav", "footer", "header", "iframe", "object", "embed"]):
+                for tag in soup(
+                    [
+                        "script",
+                        "style",
+                        "nav",
+                        "footer",
+                        "header",
+                        "iframe",
+                        "object",
+                        "embed",
+                    ]
+                ):
                     tag.decompose()
                 text = soup.get_text(separator="\n", strip=True)
                 text = "\n".join(line for line in text.splitlines() if line.strip())
-                title = soup.title.string.strip() if soup.title and soup.title.string else ""
+                title = (
+                    soup.title.string.strip()
+                    if soup.title and soup.title.string
+                    else ""
+                )
                 result_content_type = "html"
             else:
                 text = body

@@ -30,6 +30,7 @@ def detect_framework(workroot: Path) -> list[str]:
                 frameworks.append(fw)
     if (workroot / "package.json").exists():
         import json
+
         try:
             pkg = json.loads((workroot / "package.json").read_text())
             deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
@@ -58,7 +59,11 @@ def detect_package_manager(workroot: Path) -> str | None:
 
 
 def detect_test_command(workroot: Path) -> str | None:
-    if (workroot / "pyproject.toml").exists() or list(workroot.glob("test_*.py")) or list(workroot.glob("*_test.py")):
+    if (
+        (workroot / "pyproject.toml").exists()
+        or list(workroot.glob("test_*.py"))
+        or list(workroot.glob("*_test.py"))
+    ):
         return "pytest"
     if (workroot / "package.json").exists():
         return "npm test"

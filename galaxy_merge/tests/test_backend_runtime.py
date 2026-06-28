@@ -6,23 +6,12 @@ session isolation, WebSocket broadcast safety, goal cancellation,
 safety boundaries, session-scoped notes injection, and atomic writes.
 """
 
-
-import pytest
-
-pytestmark = [pytest.mark.integration]
-
-
-import asyncio
 import json
-import os
-import signal
-import subprocess
-import sys
 import tempfile
 import threading
 import time
 from pathlib import Path
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -42,8 +31,6 @@ from galaxy_merge.core.concurrency import (
     cleanup_stale_sessions,
     register_active_session,
     read_active_port_map,
-    write_heartbeat,
-    upgrade_concurrency,
 )
 from galaxy_merge.tools.notes_tools import (
     get_injected_notes,
@@ -51,10 +38,13 @@ from galaxy_merge.tools.notes_tools import (
     _injected_by_gm_dir,
 )
 
+pytestmark = [pytest.mark.integration]
+
 
 # =============================================================================
 # Port Allocation
 # =============================================================================
+
 
 class TestPortAllocation:
     def test_find_free_port_returns_localhost_port(self):
@@ -124,6 +114,7 @@ class TestPortAllocation:
 # Crash Recovery
 # =============================================================================
 
+
 class TestCrashRecovery:
     def test_state_json_readable_after_crash(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -161,8 +152,14 @@ class TestCrashRecovery:
         session = Session(tmp_path)
         session.save_state()
 
-        for fname in ["transcript.jsonl", "council.jsonl", "tool_calls.jsonl",
-                       "safety.jsonl", "provider_events.jsonl", "compaction.jsonl"]:
+        for fname in [
+            "transcript.jsonl",
+            "council.jsonl",
+            "tool_calls.jsonl",
+            "safety.jsonl",
+            "provider_events.jsonl",
+            "compaction.jsonl",
+        ]:
             assert (session.session_dir / fname).exists(), f"Missing {fname}"
 
         assert (session.session_dir / "diffs").is_dir()
@@ -173,6 +170,7 @@ class TestCrashRecovery:
 # Double-Shutdown Prevention
 # =============================================================================
 
+
 class TestDoubleShutdown:
     def test_shutdown_idempotent(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -180,6 +178,7 @@ class TestDoubleShutdown:
         session.save_state()
 
         from galaxy_merge.app.launcher import Launcher
+
         launcher = Launcher()
         launcher.session = session
         launcher.server_info = None
@@ -198,13 +197,18 @@ class TestDoubleShutdown:
         session.save_state()
 
         from galaxy_merge.app.launcher import Launcher
+
         launcher = Launcher()
         launcher.session = session
 
         mock_socket = MagicMock()
         mock_server = MagicMock()
         mock_server._socket = mock_socket
-        launcher.server_info = {"server": mock_server, "port": 12345, "url": "http://localhost:12345"}
+        launcher.server_info = {
+            "server": mock_server,
+            "port": 12345,
+            "url": "http://localhost:12345",
+        }
 
         launcher._shutdown()
         mock_socket.close.assert_called_once()
@@ -214,6 +218,7 @@ class TestDoubleShutdown:
 # =============================================================================
 # Session Isolation
 # =============================================================================
+
 
 class TestSessionIsolation:
     def test_unique_session_ids(self, tmp_path):
@@ -263,6 +268,7 @@ class TestSessionIsolation:
 # Session-Scoped Notes Injection
 # =============================================================================
 
+
 class TestSessionScopedNotes:
     def test_injection_is_per_gm_dir(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -306,6 +312,7 @@ class TestSessionScopedNotes:
 # =============================================================================
 # EventLog Thread Safety
 # =============================================================================
+
 
 class TestEventLogConcurrency:
     def test_concurrent_emits_produce_valid_jsonl(self, tmp_path):
@@ -374,6 +381,7 @@ class TestEventLogConcurrency:
 # Atomic Write Correctness
 # =============================================================================
 
+
 class TestAtomicWrites:
     def test_atomic_write_creates_file(self, tmp_path):
         target = tmp_path / "test.json"
@@ -432,6 +440,7 @@ class TestAtomicWrites:
 # Conflict Detection
 # =============================================================================
 
+
 class TestConflictDetection:
     def test_no_conflict_when_unchanged(self, tmp_path):
         path = tmp_path / "file.txt"
@@ -470,6 +479,7 @@ class TestConflictDetection:
 # =============================================================================
 # WorkRoot Detection
 # =============================================================================
+
 
 class TestWorkRootDetection:
     def test_detects_git_project(self, tmp_path):
@@ -512,6 +522,7 @@ class TestWorkRootDetection:
 # =============================================================================
 # Stale Session Cleanup
 # =============================================================================
+
 
 class TestStaleSessionCleanup:
     def test_cleanup_removes_old_heartbeats(self, tmp_path):
@@ -561,10 +572,12 @@ class TestStaleSessionCleanup:
 # Safety Boundary
 # =============================================================================
 
+
 class TestSafetyBoundary:
     def test_path_policy_blocks_system_paths(self):
         from galaxy_merge.safety.path_policy import PathPolicy
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             wp = Path(td)
             policy = PathPolicy(wp)
@@ -574,6 +587,7 @@ class TestSafetyBoundary:
     def test_governor_blocks_outside_workroot(self, tmp_path):
         from galaxy_merge.safety.governor import SafetyGovernor
         from galaxy_merge.safety.audit import SafetyAudit
+
         init_gm_dir(tmp_path)
         audit = SafetyAudit(tmp_path / ".gm" / "safety" / "blocked_actions.jsonl")
         gov = SafetyGovernor(tmp_path, tmp_path / ".gm", audit)
@@ -583,6 +597,7 @@ class TestSafetyBoundary:
     def test_governor_allows_inside_workroot(self, tmp_path):
         from galaxy_merge.safety.governor import SafetyGovernor
         from galaxy_merge.safety.audit import SafetyAudit
+
         init_gm_dir(tmp_path)
         audit = SafetyAudit(tmp_path / ".gm" / "safety" / "blocked_actions.jsonl")
         gov = SafetyGovernor(tmp_path, tmp_path / ".gm", audit)
@@ -592,6 +607,7 @@ class TestSafetyBoundary:
     def test_command_policy_blocks_dangerous_commands(self):
         from galaxy_merge.safety.command_policy import CommandPolicy
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             cp = CommandPolicy(Path(td))
             result = cp.check("sudo rm -rf /")
@@ -600,6 +616,7 @@ class TestSafetyBoundary:
     def test_credential_detection_in_text(self):
         from galaxy_merge.safety.credential_policy import CredentialPolicy
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             policy = CredentialPolicy(Path(td))
             findings = policy.scan_text("api_key=sk-1234567890abcdef1234567890abcdef")
@@ -608,6 +625,7 @@ class TestSafetyBoundary:
     def test_credential_redaction(self):
         from galaxy_merge.safety.credential_policy import CredentialPolicy
         import tempfile
+
         with tempfile.TemporaryDirectory() as td:
             policy = CredentialPolicy(Path(td))
             redacted = policy.redact("token: ghp_123456789012345678901234567890123456")
@@ -618,6 +636,7 @@ class TestSafetyBoundary:
 # =============================================================================
 # Lock Manager
 # =============================================================================
+
 
 class TestLockManager:
     def test_acquire_and_release(self, tmp_path):
@@ -665,6 +684,7 @@ class TestLockManager:
 # File Lock
 # =============================================================================
 
+
 class TestFileLock:
     def test_basic_lock_unlock(self, tmp_path):
         lock_path = tmp_path / "test.lock"
@@ -693,6 +713,7 @@ class TestFileLock:
 # Parallel Session File Conflict
 # =============================================================================
 
+
 class TestParallelSessionConflict:
     def test_hash_before_write_detects_conflict(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -700,11 +721,13 @@ class TestParallelSessionConflict:
         target.write_text("original")
 
         from galaxy_merge.core.concurrency import file_hash
+
         h = file_hash(target)
 
         target.write_text("modified by session A")
 
         from galaxy_merge.tools.file_tools import _file_hash
+
         current = _file_hash(target)
         assert current != h
 
@@ -714,9 +737,11 @@ class TestParallelSessionConflict:
         target.write_text("original content")
 
         from galaxy_merge.core.concurrency import file_hash
+
         h = file_hash(target)
 
         from galaxy_merge.tools.file_tools import _file_hash
+
         assert _file_hash(target) == h
 
         target.write_text("modified by someone else")
@@ -724,6 +749,7 @@ class TestParallelSessionConflict:
 
     def test_file_lock_prevents_concurrent_write(self, tmp_path):
         from galaxy_merge.core.locks import FileLock, atomic_write
+
         target = tmp_path / "locked.txt"
         target.write_text("v1")
 
@@ -739,6 +765,7 @@ class TestParallelSessionConflict:
 # =============================================================================
 # WebSocket Broadcast Safety
 # =============================================================================
+
 
 class TestWebSocketBroadcastSafety:
     @pytest.mark.asyncio
@@ -773,7 +800,9 @@ class TestWebSocketBroadcastSafety:
             server = SessionServer(session, port=0)
             try:
                 dead_ws = AsyncMock()
-                dead_ws.send_json = AsyncMock(side_effect=ConnectionResetError("closed"))
+                dead_ws.send_json = AsyncMock(
+                    side_effect=ConnectionResetError("closed")
+                )
                 server._ws_clients.append(dead_ws)
 
                 good_ws = AsyncMock()
@@ -844,7 +873,6 @@ class TestEventsPagination:
             redacted, _, _ = server._events_payload(limit=2, offset=0, redact=False)
             assert redacted[0]["event"] == "log"
 
-
     def test_events_endpoint_defaults_to_legacy_list_shape(self):
         from fastapi.testclient import TestClient
         from galaxy_merge.app.server import SessionServer
@@ -901,7 +929,11 @@ class TestSessionServerResume:
 
             assert response.status_code == 200
             assert response.json()["status"] == "resumed"
-            state = json.loads((tmp / ".gm" / "sessions" / session.session_id / "state.json").read_text())
+            state = json.loads(
+                (
+                    tmp / ".gm" / "sessions" / session.session_id / "state.json"
+                ).read_text()
+            )
             assert state["status"] == "running"
 
 
@@ -937,15 +969,18 @@ class TestPortMapState:
 # Self-Codebase Detection
 # =============================================================================
 
+
 class TestSelfCodebaseDetection:
     def test_detects_own_codebase(self, tmp_path):
         from galaxy_merge.app.launcher import _is_inside_galaxy_merge_codebase
+
         install_dir = Path(__file__).resolve().parent.parent.parent
         result = _is_inside_galaxy_merge_codebase(install_dir)
         assert result is True
 
     def test_allows_external_project(self, tmp_path):
         from galaxy_merge.app.launcher import _is_inside_galaxy_merge_codebase
+
         result = _is_inside_galaxy_merge_codebase(tmp_path)
         assert result is False
 
@@ -954,9 +989,11 @@ class TestSelfCodebaseDetection:
 # Project JSON Validation
 # =============================================================================
 
+
 class TestProjectJsonValidation:
     def test_valid_project_json(self, tmp_path):
         from galaxy_merge.core.session import _init_project_json
+
         gm_dir = tmp_path / ".gm"
         gm_dir.mkdir()
         _init_project_json(gm_dir, tmp_path)
@@ -968,6 +1005,7 @@ class TestProjectJsonValidation:
 
     def test_corrupted_project_json_detected(self, tmp_path):
         from galaxy_merge.core.session import _validate_project_json
+
         gm_dir = tmp_path / ".gm"
         gm_dir.mkdir()
         (gm_dir / "project.json").write_text("not json {{{")

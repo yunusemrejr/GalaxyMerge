@@ -73,9 +73,12 @@ class LocationClassifier:
 
         home_str = str(self.home)
         if resolved_str.startswith(home_str):
-            if resolved_str == home_str or resolved_str.count("/") <= home_str.count("/") + 1:
+            if (
+                resolved_str == home_str
+                or resolved_str.count("/") <= home_str.count("/") + 1
+            ):
                 return "local_user_home"
-            rest = resolved_str[len(home_str):].strip("/")
+            rest = resolved_str[len(home_str) :].strip("/")
             if rest.startswith(".config/galaxy-merge"):
                 return "galaxy_merge_app_config"
             return "local_user_home"
@@ -83,7 +86,19 @@ class LocationClassifier:
         if resolved_str.startswith("/tmp"):
             return "local_temp"
 
-        system_prefixes = ["/bin", "/sbin", "/usr", "/etc", "/var", "/boot", "/dev", "/proc", "/sys", "/run", "/root"]
+        system_prefixes = [
+            "/bin",
+            "/sbin",
+            "/usr",
+            "/etc",
+            "/var",
+            "/boot",
+            "/dev",
+            "/proc",
+            "/sys",
+            "/run",
+            "/root",
+        ]
         for p in system_prefixes:
             if resolved_str.startswith(p):
                 return "local_system"
@@ -114,7 +129,11 @@ class LocationClassifier:
             return "ssh_remote"
         if pattern.startswith("terraform") or pattern.startswith("pulumi"):
             return "production_target"
-        if pattern.startswith("aws") or pattern.startswith("gcloud") or pattern.startswith("az"):
+        if (
+            pattern.startswith("aws")
+            or pattern.startswith("gcloud")
+            or pattern.startswith("az")
+        ):
             return "production_target"
         if "deploy" in pattern:
             return "production_target"
@@ -132,7 +151,14 @@ class LocationClassifier:
 
     def is_remote_mutation(self, command: str) -> bool:
         cls = self.classify_command(command)
-        return cls in ("git_remote", "ssh_remote", "ftp_remote", "sftp_remote", "production_target", "staging_target")
+        return cls in (
+            "git_remote",
+            "ssh_remote",
+            "ftp_remote",
+            "sftp_remote",
+            "production_target",
+            "staging_target",
+        )
 
     def is_production(self, command: str) -> bool:
         cls = self.classify_command(command)
@@ -148,12 +174,34 @@ class LocationClassifier:
         return {
             "target": target,
             "classification": cls,
-            "is_remote": cls in ("git_remote", "ssh_remote", "ftp_remote", "sftp_remote", "production_target", "staging_target"),
+            "is_remote": cls
+            in (
+                "git_remote",
+                "ssh_remote",
+                "ftp_remote",
+                "sftp_remote",
+                "production_target",
+                "staging_target",
+            ),
             "is_production": cls == "production_target",
             "is_local": cls.startswith("local_"),
             "host": inspected.host if inspected else "",
-            "path": inspected.path if inspected else (target if target_type == "path" else ""),
+            "path": inspected.path
+            if inspected
+            else (target if target_type == "path" else ""),
             "repo": inspected.repo if inspected else "",
-            "risk": inspected.risk if inspected else ("high" if cls in ("local_system", "production_target") else "low"),
-            "policy_decision": "blocked_by_default" if cls in ("git_remote", "ssh_remote", "ftp_remote", "sftp_remote", "production_target", "staging_target") else "allowed_by_default",
+            "risk": inspected.risk
+            if inspected
+            else ("high" if cls in ("local_system", "production_target") else "low"),
+            "policy_decision": "blocked_by_default"
+            if cls
+            in (
+                "git_remote",
+                "ssh_remote",
+                "ftp_remote",
+                "sftp_remote",
+                "production_target",
+                "staging_target",
+            )
+            else "allowed_by_default",
         }

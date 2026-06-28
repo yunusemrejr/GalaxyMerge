@@ -17,6 +17,7 @@ class SessionMemory:
         }
         self._entries.append(entry)
         import json
+
         atomic_append(self.transcript_path, json.dumps(entry, default=str))
 
     def get_history(self) -> list[dict[str, Any]]:

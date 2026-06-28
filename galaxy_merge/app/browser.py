@@ -11,7 +11,11 @@ def open_browser(url: str) -> None:
             path = shutil.which(browser)
             if path:
                 try:
-                    subprocess.Popen([path, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                    subprocess.Popen(
+                        [path, url],
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
                 except Exception:
                     continue
                 break

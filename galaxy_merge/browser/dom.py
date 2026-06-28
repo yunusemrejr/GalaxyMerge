@@ -4,6 +4,7 @@ from typing import Any
 class DOMInspector:
     def inspect(self, html: str, selector: str = "body") -> dict[str, Any]:
         from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(html, "lxml")
         elements = soup.select(selector)
         return {
@@ -21,6 +22,7 @@ class DOMInspector:
 
     def get_page_structure(self, html: str) -> list[dict[str, Any]]:
         from bs4 import BeautifulSoup
+
         soup = BeautifulSoup(html, "lxml")
 
         def extract_structure(tag, depth=0):
@@ -44,7 +46,9 @@ class DOMInspector:
             return []
         return extract_structure(body)[:50]
 
-    def inspect_page_structure(self, session: dict[str, Any], selector: str = "body") -> dict[str, Any]:
+    def inspect_page_structure(
+        self, session: dict[str, Any], selector: str = "body"
+    ) -> dict[str, Any]:
         data_dir = session.get("data_dir", "")
         url = session.get("url", "")
         return {

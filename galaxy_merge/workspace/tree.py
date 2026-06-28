@@ -2,9 +2,20 @@ from pathlib import Path
 from typing import Any
 
 IGNORE_DIRS: set[str] = {
-    ".git", ".gm/cache", "node_modules", "venv", ".venv",
-    "dist", "build", "target", "__pycache__", ".cache",
-    "coverage", ".mypy_cache", ".ruff_cache", ".pytest_cache",
+    ".git",
+    ".gm/cache",
+    "node_modules",
+    "venv",
+    ".venv",
+    "dist",
+    "build",
+    "target",
+    "__pycache__",
+    ".cache",
+    "coverage",
+    ".mypy_cache",
+    ".ruff_cache",
+    ".pytest_cache",
 }
 
 IGNORE_EXTENSIONS: set[str] = {".pyc", ".pyo", ".so", ".o", ".class"}

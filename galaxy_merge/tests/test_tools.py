@@ -1,11 +1,10 @@
-
+from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.unit]
-from pathlib import Path
-
 from galaxy_merge.tools.schemas import ToolSchema, ToolResult
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestToolSchemas:
@@ -41,6 +40,7 @@ class TestToolKernel:
             kernel = ToolKernel(gov)
 
             schema = ToolSchema("test.hello", "Says hello")
+
             async def handler(name: str = "world"):
                 return ToolResult(success=True, data={"message": f"hello {name}"})
 
@@ -67,7 +67,9 @@ class TestToolKernel:
             assert "unknown tool" in result.error
 
     @pytest.mark.asyncio
-    async def test_relative_mutation_paths_are_checked_against_workroot(self, tmp_path, monkeypatch):
+    async def test_relative_mutation_paths_are_checked_against_workroot(
+        self, tmp_path, monkeypatch
+    ):
         # Given: the process cwd is outside the WorkRoot.
         from galaxy_merge.safety.governor import SafetyGovernor
         from galaxy_merge.safety.audit import SafetyAudit
@@ -86,11 +88,14 @@ class TestToolKernel:
         monkeypatch.chdir(outside)
 
         # When: a relative path mutation is executed through the native kernel.
-        result = await kernel.execute("file.write", {
-            "path": "src/result.txt",
-            "content": "ok",
-            "expected_hash": "",
-        })
+        result = await kernel.execute(
+            "file.write",
+            {
+                "path": "src/result.txt",
+                "content": "ok",
+                "expected_hash": "",
+            },
+        )
 
         # Then: safety permits the WorkRoot-local target and the file is written there.
         assert result.success is True

@@ -37,6 +37,7 @@ def register_active_session(
     registry_path = gm_dir / "sessions" / "registry.jsonl"
     registry_path.parent.mkdir(parents=True, exist_ok=True)
     from galaxy_merge.core.locks import atomic_append
+
     record = {
         "session_id": session_id,
         "started_at": now,
@@ -87,9 +88,7 @@ def write_heartbeat(gm_dir: Path, session_id: str) -> None:
     atomic_write(hb_dir / f"{session_id}.hb", str(time.time()))
 
 
-def cleanup_stale_sessions(
-    gm_dir: Path, max_age: float = 300
-) -> list[str]:
+def cleanup_stale_sessions(gm_dir: Path, max_age: float = 300) -> list[str]:
     """Remove session directories that have no heartbeat within *max_age*.
 
     Returns a list of stale session IDs that were cleaned up.
@@ -136,7 +135,11 @@ def cleanup_stale_sessions(
                         except json.JSONDecodeError:
                             pass
                     content = "\n".join(new_lines)
-                    atomic_write(registry_path, content + ("\n" if content else ""), _nested_lock=True)
+                    atomic_write(
+                        registry_path,
+                        content + ("\n" if content else ""),
+                        _nested_lock=True,
+                    )
             except (OSError, LockTimeout):
                 pass
 
@@ -155,7 +158,9 @@ def cleanup_stale_sessions(
                     mapping = {}
                 for sid in stale:
                     mapping.pop(sid, None)
-                atomic_write(ports_path, json.dumps(mapping, indent=2), _nested_lock=True)
+                atomic_write(
+                    ports_path, json.dumps(mapping, indent=2), _nested_lock=True
+                )
 
     return stale
 
@@ -172,15 +177,14 @@ def file_hash(path: Path) -> str:
     on-disk content — important for conflict detection.
     """
     import hashlib
+
     try:
         return hashlib.sha256(path.read_bytes()).hexdigest()[:16]
     except OSError:
         return ""
 
 
-def detect_file_conflict(
-    path: Path, expected_hash: str
-) -> dict[str, Any]:
+def detect_file_conflict(path: Path, expected_hash: str) -> dict[str, Any]:
     """Check if *path* has changed since *expected_hash* was recorded.
 
     Returns {"conflict": False} or {"conflict": True, "current_hash": ..., "path": ...}.
@@ -198,6 +202,7 @@ def detect_file_conflict(
 
 # ── Lock-manager singleton ──────────────────────────────────────────
 
+
 def get_lock_manager(gm_dir: Path) -> LockManager:
     global _LOCK_MANAGER
     if _LOCK_MANAGER is None:
@@ -206,6 +211,7 @@ def get_lock_manager(gm_dir: Path) -> LockManager:
 
 
 # ── Patching functions ──────────────────────────────────────────────
+
 
 def patch_memory_store() -> None:
     """Replace MemoryStore.append and set_preference with lock-safe versions."""
@@ -221,6 +227,7 @@ def patch_memory_store() -> None:
     def _safe_append(self, kind: str, data: dict[str, Any]) -> None:
         path = self.memory_dir / f"{kind}.jsonl"
         from galaxy_merge.core.locks import atomic_append
+
         atomic_append(path, json.dumps(data, default=str))
 
     @functools.wraps(_orig_set_pref)
@@ -289,25 +296,36 @@ def patch_project_memory() -> None:
     def _safe_rf(self, fact: str, source: str = "session") -> None:
         path = self.store.memory_dir / "known_facts.jsonl"
         from galaxy_merge.core.locks import atomic_append
+
         atomic_append(path, json.dumps({"fact": fact, "source": source}, default=str))
 
     @functools.wraps(_orig_rfail)
     def _safe_rfail(self, error: str, context: str = "") -> None:
         path = self.store.memory_dir / "known_failures.jsonl"
         from galaxy_merge.core.locks import atomic_append
-        atomic_append(path, json.dumps({"error": error, "context": context}, default=str))
+
+        atomic_append(
+            path, json.dumps({"error": error, "context": context}, default=str)
+        )
 
     @functools.wraps(_orig_rfix)
     def _safe_rfix(self, issue: str, fix: str, verified: bool = False) -> None:
         path = self.store.memory_dir / "verified_fixes.jsonl"
         from galaxy_merge.core.locks import atomic_append
-        atomic_append(path, json.dumps({"issue": issue, "fix": fix, "verified": verified}, default=str))
+
+        atomic_append(
+            path,
+            json.dumps({"issue": issue, "fix": fix, "verified": verified}, default=str),
+        )
 
     @functools.wraps(_orig_rlesson)
     def _safe_rlesson(self, lesson: str, category: str = "general") -> None:
         path = self.store.memory_dir / "lessons.jsonl"
         from galaxy_merge.core.locks import atomic_append
-        atomic_append(path, json.dumps({"lesson": lesson, "category": category}, default=str))
+
+        atomic_append(
+            path, json.dumps({"lesson": lesson, "category": category}, default=str)
+        )
 
     ProjectMemory.record_fact = _safe_rf
     ProjectMemory.record_failure = _safe_rfail
@@ -391,8 +409,14 @@ def patch_session() -> None:
         self.session_dir.mkdir(parents=True, exist_ok=True)
         for sub in ["diffs", "artifacts"]:
             (self.session_dir / sub).mkdir(parents=True, exist_ok=True)
-        for fname in ["transcript.jsonl", "council.jsonl", "tool_calls.jsonl",
-                       "safety.jsonl", "provider_events.jsonl", "compaction.jsonl"]:
+        for fname in [
+            "transcript.jsonl",
+            "council.jsonl",
+            "tool_calls.jsonl",
+            "safety.jsonl",
+            "provider_events.jsonl",
+            "compaction.jsonl",
+        ]:
             p = self.session_dir / fname
             if not p.exists():
                 p.touch()
@@ -400,9 +424,9 @@ def patch_session() -> None:
             "session_id": self.session_id,
             "workroot": str(self.workroot),
             "created_at": self.created_at.isoformat(),
-            "updated_at": __import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ).isoformat(),
+            "updated_at": __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .isoformat(),
             "status": self._state.get("status", "running"),
             "goal": self._state.get("goal", ""),
             "active": self._state.get("active", True),
@@ -418,9 +442,9 @@ def patch_session() -> None:
             "goal": goal,
             "parsed": {},
             "status": "understanding",
-            "created_at": __import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ).isoformat(),
+            "created_at": __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .isoformat(),
         }
         self.goal_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.goal_path, json.dumps(goal_data, indent=2))
@@ -445,11 +469,14 @@ def patch_workspace_indexer() -> None:
         path = self.index_dir / "file_hashes.json"
         lock_path = path.with_suffix(".lock")
         with FileLock(lock_path, timeout=10.0):
-            atomic_write(path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
+            atomic_write(
+                path, json.dumps(self._file_hashes, indent=2), _nested_lock=True
+            )
 
     @functools.wraps(_orig_refresh)
     def _safe_refresh(self) -> dict[str, Any]:
         import hashlib
+
         changed: list[str] = []
         removed: list[str] = []
         current_hashes: dict[str, str] = {}
@@ -478,6 +505,7 @@ def patch_workspace_indexer() -> None:
         self._save_hashes()
 
         from galaxy_merge.workspace.tree import FileTree
+
         tree = FileTree(self.workroot).build()
 
         summary = {
@@ -487,12 +515,16 @@ def patch_workspace_indexer() -> None:
             "tree": tree,
         }
         meta_path = self.index_dir / "index.meta.json"
-        atomic_write(meta_path, json.dumps({"changed": changed, "removed": removed, "total": file_count}))
+        atomic_write(
+            meta_path,
+            json.dumps({"changed": changed, "removed": removed, "total": file_count}),
+        )
         return summary
 
     @functools.wraps(_orig_inc)
     def _safe_inc(self, files: list[str]) -> dict[str, Any]:
         import hashlib
+
         hashes_path = self.index_dir / "file_hashes.json"
         lock_path = hashes_path.with_suffix(".lock")
         with FileLock(lock_path, timeout=10.0):
@@ -512,7 +544,9 @@ def patch_workspace_indexer() -> None:
                             changed.append(relative)
                     except (OSError, ValueError):
                         pass
-            atomic_write(hashes_path, json.dumps(self._file_hashes, indent=2), _nested_lock=True)
+            atomic_write(
+                hashes_path, json.dumps(self._file_hashes, indent=2), _nested_lock=True
+            )
         return {"changed": changed, "total": len(self._file_hashes)}
 
     WorkspaceIndexer._save_hashes = _safe_save_hashes
@@ -530,11 +564,13 @@ def patch_event_log() -> None:
     _orig_emit = EventLog.emit
 
     @functools.wraps(_orig_emit)
-    def _safe_emit(self, event: str, session_id: str = "", **kwargs: Any) -> dict[str, Any]:
+    def _safe_emit(
+        self, event: str, session_id: str = "", **kwargs: Any
+    ) -> dict[str, Any]:
         record = {
-            "time": __import__("datetime").datetime.now(
-                __import__("datetime").timezone.utc
-            ).isoformat(),
+            "time": __import__("datetime")
+            .datetime.now(__import__("datetime").timezone.utc)
+            .isoformat(),
             "session_id": session_id,
             "event": event,
             **kwargs,
@@ -544,6 +580,7 @@ def patch_event_log() -> None:
         if not self.path.exists():
             self.path.touch()
         from galaxy_merge.core.locks import atomic_append
+
         atomic_append(self.path, line)
         return record
 
@@ -562,9 +599,11 @@ def patch_session_memory() -> None:
     @functools.wraps(_orig_add)
     def _safe_add(self, entry_type: str, content: Any) -> None:
         import json
+
         entry = {"type": entry_type, "content": content}
         self._entries.append(entry)
         from galaxy_merge.core.locks import atomic_append
+
         atomic_append(self.transcript_path, json.dumps(entry, default=str))
 
     SessionMemory.add_entry = _safe_add
@@ -585,7 +624,9 @@ def patch_notes_tools() -> None:
     _orig_get_idx = nt._get_index
 
     @functools.wraps(_orig_save_idx)
-    def _safe_save_index(notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False) -> None:
+    def _safe_save_index(
+        notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False
+    ) -> None:
         idx_path = notes_dir / "index.json"
         lock_path = idx_path.with_suffix(".lock")
         with FileLock(lock_path, timeout=5.0):

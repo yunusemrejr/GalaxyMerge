@@ -5,23 +5,20 @@ outputs — not single-model "pick best answer".
 Uses a mock provider that returns controlled structured JSON per role.
 """
 
-
 import json
-import asyncio
-from pathlib import Path
 from typing import Any
-import pytest
 
-pytestmark = [pytest.mark.unit]
+import pytest
 
 from galaxy_merge.fusion.council import Council
 from galaxy_merge.fusion.router import FusionRouter
-from galaxy_merge.fusion.synthesizer import Synthesizer
 from galaxy_merge.fusion.schemas import ROLE_SCHEMAS
 from galaxy_merge.fusion.roles import ROLE_DEFINITIONS
-from galaxy_merge.providers.registry import ProviderRegistry
+from galaxy_merge.fusion.synthesizer import Synthesizer
 from galaxy_merge.providers.base import ProviderBase
-from galaxy_merge.core.goal import GoalEngine
+from galaxy_merge.providers.registry import ProviderRegistry
+
+pytestmark = [pytest.mark.unit]
 
 
 # =============================================================================
@@ -43,14 +40,36 @@ MOCK_ROLE_RESPONSES = {
     },
     "implementer": {
         "changes": [
-            {"file": "src/main.py", "action": "edit", "diff": "--- a/src/main.py\n+++ b/src/main.py\n+def validate(): pass", "rationale": "add validation function"},
-            {"file": "tests/test_main.py", "action": "edit", "diff": "+def test_validate(): pass", "rationale": "test validation"},
+            {
+                "file": "src/main.py",
+                "action": "edit",
+                "diff": "--- a/src/main.py\n+++ b/src/main.py\n+def validate(): pass",
+                "rationale": "add validation function",
+            },
+            {
+                "file": "tests/test_main.py",
+                "action": "edit",
+                "diff": "+def test_validate(): pass",
+                "rationale": "test validation",
+            },
         ]
     },
     "reviewer": {
         "findings": [
-            {"type": "bug", "file": "src/main.py", "evidence": "no input validation on line 42", "severity": "high", "recommendation": "add try/except"},
-            {"type": "style", "file": "src/cli.py", "evidence": "line 10 > 120 chars", "severity": "low", "recommendation": "wrap"},
+            {
+                "type": "bug",
+                "file": "src/main.py",
+                "evidence": "no input validation on line 42",
+                "severity": "high",
+                "recommendation": "add try/except",
+            },
+            {
+                "type": "style",
+                "file": "src/cli.py",
+                "evidence": "line 10 > 120 chars",
+                "severity": "low",
+                "recommendation": "wrap",
+            },
         ],
         "risks": ["validation may break existing callers"],
         "approved": True,
@@ -62,12 +81,21 @@ MOCK_ROLE_RESPONSES = {
     },
     "cheap_verifier": {
         "findings": [
-            {"type": "info", "file": "src/main.py", "evidence": "syntax looks valid", "severity": "low"},
+            {
+                "type": "info",
+                "file": "src/main.py",
+                "evidence": "syntax looks valid",
+                "severity": "low",
+            },
         ]
     },
     "synthesizer": {
         "plan": [
-            {"tool": "file.patch", "params": {"path": "src/main.py"}, "rationale": "add validation"},
+            {
+                "tool": "file.patch",
+                "params": {"path": "src/main.py"},
+                "rationale": "add validation",
+            },
         ],
         "summary": "Changes to src/main.py and tests",
         "contradictions_resolved": [],
@@ -77,8 +105,20 @@ MOCK_ROLE_RESPONSES = {
 CONTRADICTORY_REVIEW = {
     "reviewer": {
         "findings": [
-            {"type": "bug", "file": "src/main.py", "evidence": "input not validated", "severity": "high", "recommendation": "add try/except"},
-            {"type": "security", "file": "src/cli.py", "evidence": "eval() on user input", "severity": "critical", "recommendation": "remove eval()"},
+            {
+                "type": "bug",
+                "file": "src/main.py",
+                "evidence": "input not validated",
+                "severity": "high",
+                "recommendation": "add try/except",
+            },
+            {
+                "type": "security",
+                "file": "src/cli.py",
+                "evidence": "eval() on user input",
+                "severity": "critical",
+                "recommendation": "remove eval()",
+            },
         ],
         "risks": ["security hole in cli.py"],
         "approved": False,
@@ -100,11 +140,15 @@ class MockProvider(ProviderBase):
     def set_mock_responses(self, responses: dict[str, dict[str, Any]]) -> None:
         self._mock_responses = responses
 
-    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs):
-        self.call_history.append({
-            "role": "extracted_from_prompt",
-            "model": model,
-        })
+    async def chat_completion(
+        self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs
+    ):
+        self.call_history.append(
+            {
+                "role": "extracted_from_prompt",
+                "model": model,
+            }
+        )
         role = ""
         for msg in messages:
             if msg["role"] == "system" and "purpose" in msg.get("content", ""):
@@ -113,7 +157,11 @@ class MockProvider(ProviderBase):
                         role = r
                         break
         response_data = self._mock_responses.get(role, {})
-        content = json.dumps(response_data) if response_data else json.dumps({"raw": "mock response"})
+        content = (
+            json.dumps(response_data)
+            if response_data
+            else json.dumps({"raw": "mock response"})
+        )
         return {"success": True, "content": content, "model": model, "usage": {}}
 
     async def check_health(self):
@@ -123,6 +171,7 @@ class MockProvider(ProviderBase):
 # =============================================================================
 # TEST: Council assigns all configured roles
 # =============================================================================
+
 
 class TestCouncilRoleAssignment:
     @pytest.mark.asyncio
@@ -136,12 +185,46 @@ class TestCouncilRoleAssignment:
                     "max_parallel_calls": 4,
                     "timeout_seconds": 30,
                     "roles": {
-                        "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
-                        "scout": {"required": True, "model_selector": {"role": "scout", "cost_policy": "cheap"}},
-                        "implementer": {"required": True, "model_selector": {"role": "implementer", "cost_policy": "quality"}},
-                        "reviewer": {"required": True, "model_selector": {"role": "reviewer", "cost_policy": "balanced"}},
-                        "cheap_verifier": {"required": True, "count": 2, "model_selector": {"role": "cheap_verifier", "cost_policy": "cheap"}},
-                        "synthesizer": {"required": True, "model_selector": {"role": "synthesizer", "cost_policy": "quality"}},
+                        "planner": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "planner",
+                                "cost_policy": "balanced",
+                            },
+                        },
+                        "scout": {
+                            "required": True,
+                            "model_selector": {"role": "scout", "cost_policy": "cheap"},
+                        },
+                        "implementer": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "implementer",
+                                "cost_policy": "quality",
+                            },
+                        },
+                        "reviewer": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "reviewer",
+                                "cost_policy": "balanced",
+                            },
+                        },
+                        "cheap_verifier": {
+                            "required": True,
+                            "count": 2,
+                            "model_selector": {
+                                "role": "cheap_verifier",
+                                "cost_policy": "cheap",
+                            },
+                        },
+                        "synthesizer": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "synthesizer",
+                                "cost_policy": "quality",
+                            },
+                        },
                     },
                 }
             }
@@ -150,17 +233,51 @@ class TestCouncilRoleAssignment:
 
         providers_json = {
             "providers": {
-                "mock": {"enabled": True, "type": "mock", "base_url": "http://mock", "auth": {"type": "none"}, "timeout_seconds": 5}
+                "mock": {
+                    "enabled": True,
+                    "type": "mock",
+                    "base_url": "http://mock",
+                    "auth": {"type": "none"},
+                    "timeout_seconds": 5,
+                }
             }
         }
         (config_dir / "providers.json").write_text(json.dumps(providers_json))
 
         models_json = {
             "models": {
-                "mock:planner": {"provider": "mock", "model": "mock-v1", "enabled": True, "context_window": 32000, "strengths": ["planning"], "roles": ["planner", "synthesizer"]},
-                "mock:scout": {"provider": "mock", "model": "mock-v2", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
-                "mock:implementer": {"provider": "mock", "model": "mock-v3", "enabled": True, "context_window": 32000, "strengths": ["implementation"], "roles": ["implementer"]},
-                "mock:reviewer": {"provider": "mock", "model": "mock-v4", "enabled": True, "context_window": 32000, "strengths": ["review"], "roles": ["reviewer", "skeptic"]},
+                "mock:planner": {
+                    "provider": "mock",
+                    "model": "mock-v1",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["planning"],
+                    "roles": ["planner", "synthesizer"],
+                },
+                "mock:scout": {
+                    "provider": "mock",
+                    "model": "mock-v2",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["fast_scan"],
+                    "roles": ["scout", "cheap_verifier"],
+                },
+                "mock:implementer": {
+                    "provider": "mock",
+                    "model": "mock-v3",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["implementation"],
+                    "roles": ["implementer"],
+                },
+                "mock:reviewer": {
+                    "provider": "mock",
+                    "model": "mock-v4",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["review"],
+                    "roles": ["reviewer", "skeptic"],
+                },
             }
         }
         (config_dir / "models.json").write_text(json.dumps(models_json))
@@ -172,19 +289,33 @@ class TestCouncilRoleAssignment:
         assert mock_prov is not None
         mock_prov.set_mock_responses(MOCK_ROLE_RESPONSES)
 
-        council = Council(registry, fusion_config["councils"]["coding_default"], "fix input validation")
+        council = Council(
+            registry,
+            fusion_config["councils"]["coding_default"],
+            "fix input validation",
+        )
         results = await council.execute()
 
         assigned = set(results.keys())
-        expected = {"planner", "scout", "implementer", "reviewer", "cheap_verifier", "synthesizer"}
+        expected = {
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "cheap_verifier",
+            "synthesizer",
+        }
         missing = expected - assigned
         assert not missing, f"Roles not assigned: {missing}"
-        assert len(results.get("cheap_verifier", [])) == 2, "cheap_verifier count should be 2"
+        assert len(results.get("cheap_verifier", [])) == 2, (
+            "cheap_verifier count should be 2"
+        )
 
 
 # =============================================================================
 # TEST: Each role produces structured output matching its schema
 # =============================================================================
+
 
 class TestStructuredRoleOutputs:
     @pytest.mark.asyncio
@@ -194,7 +325,9 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["planner"]
         for field in required:
-            assert field in data and data[field], f"planner missing required field: {field}"
+            assert field in data and data[field], (
+                f"planner missing required field: {field}"
+            )
 
     @pytest.mark.asyncio
     async def test_scout_output_valid(self):
@@ -202,7 +335,9 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["scout"]
         for field in required:
-            assert field in data and data[field], f"scout missing required field: {field}"
+            assert field in data and data[field], (
+                f"scout missing required field: {field}"
+            )
 
     @pytest.mark.asyncio
     async def test_implementer_output_valid(self):
@@ -210,7 +345,9 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["implementer"]
         for field in required:
-            assert field in data and data[field], f"implementer missing required field: {field}"
+            assert field in data and data[field], (
+                f"implementer missing required field: {field}"
+            )
         for change in data.get("changes", []):
             assert "file" in change
             assert "action" in change
@@ -222,7 +359,9 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["reviewer"]
         for field in required:
-            assert field in data and data[field], f"reviewer missing required field: {field}"
+            assert field in data and data[field], (
+                f"reviewer missing required field: {field}"
+            )
 
     @pytest.mark.asyncio
     async def test_skeptic_output_valid(self):
@@ -230,7 +369,9 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["skeptic"]
         for field in required:
-            assert field in data and data[field], f"skeptic missing required field: {field}"
+            assert field in data and data[field], (
+                f"skeptic missing required field: {field}"
+            )
 
     @pytest.mark.asyncio
     async def test_synthesizer_output_valid(self):
@@ -238,12 +379,15 @@ class TestStructuredRoleOutputs:
         required = schema.get("required", [])
         data = MOCK_ROLE_RESPONSES["synthesizer"]
         for field in required:
-            assert field in data and data[field], f"synthesizer missing required field: {field}"
+            assert field in data and data[field], (
+                f"synthesizer missing required field: {field}"
+            )
 
 
 # =============================================================================
 # TEST: Fusion actually synthesizes from MULTIPLE roles, not one "best"
 # =============================================================================
+
 
 class TestFusionMultiRoleSynthesis:
     @pytest.mark.asyncio
@@ -253,8 +397,12 @@ class TestFusionMultiRoleSynthesis:
         results = {
             "planner": [{"role": "planner", "parsed": MOCK_ROLE_RESPONSES["planner"]}],
             "scout": [{"role": "scout", "parsed": MOCK_ROLE_RESPONSES["scout"]}],
-            "implementer": [{"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}],
-            "reviewer": [{"role": "reviewer", "parsed": MOCK_ROLE_RESPONSES["reviewer"]}],
+            "implementer": [
+                {"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}
+            ],
+            "reviewer": [
+                {"role": "reviewer", "parsed": MOCK_ROLE_RESPONSES["reviewer"]}
+            ],
         }
         fused = syn.fuse(results)
 
@@ -272,8 +420,12 @@ class TestFusionMultiRoleSynthesis:
         syn = Synthesizer()
         results = {
             "planner": [{"role": "planner", "parsed": MOCK_ROLE_RESPONSES["planner"]}],
-            "implementer": [{"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}],
-            "reviewer": [{"role": "reviewer", "parsed": MOCK_ROLE_RESPONSES["reviewer"]}],
+            "implementer": [
+                {"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}
+            ],
+            "reviewer": [
+                {"role": "reviewer", "parsed": MOCK_ROLE_RESPONSES["reviewer"]}
+            ],
         }
         fused = syn.fuse(results)
 
@@ -310,10 +462,19 @@ class TestFusionMultiRoleSynthesis:
         """Contradictory findings should be resolved using file/tool evidence."""
         syn = Synthesizer()
         contradictions = [
-            {"type": "blocker", "description": "eval() not removed", "source": "skeptic"},
+            {
+                "type": "blocker",
+                "description": "eval() not removed",
+                "source": "skeptic",
+            },
         ]
         changes = [
-            {"file": "src/cli.py", "action": "edit", "diff": "-eval()", "rationale": "remove eval"},
+            {
+                "file": "src/cli.py",
+                "action": "edit",
+                "diff": "-eval()",
+                "rationale": "remove eval",
+            },
         ]
         resolved = syn._resolve_contradictions(contradictions, changes)
         assert len(resolved) == 1
@@ -335,6 +496,7 @@ class TestFusionMultiRoleSynthesis:
 # TEST: Full orchestrator path with mock — verify events
 # =============================================================================
 
+
 class TestOrchestratorCouncilEvents:
     @pytest.mark.asyncio
     async def test_orchestrator_emits_council_events(self, tmp_path):
@@ -350,26 +512,66 @@ class TestOrchestratorCouncilEvents:
         cfg = {
             "councils": {
                 "coding_default": {
-                    "max_parallel_calls": 2, "timeout_seconds": 10,
+                    "max_parallel_calls": 2,
+                    "timeout_seconds": 10,
                     "roles": {
-                        "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
-                        "implementer": {"required": True, "model_selector": {"role": "implementer", "cost_policy": "balanced"}},
-                        "synthesizer": {"required": True, "model_selector": {"role": "synthesizer", "cost_policy": "balanced"}},
+                        "planner": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "planner",
+                                "cost_policy": "balanced",
+                            },
+                        },
+                        "implementer": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "implementer",
+                                "cost_policy": "balanced",
+                            },
+                        },
+                        "synthesizer": {
+                            "required": True,
+                            "model_selector": {
+                                "role": "synthesizer",
+                                "cost_policy": "balanced",
+                            },
+                        },
                     },
                 }
             }
         }
         (config_dir / "fusion.json").write_text(json.dumps(cfg))
-        (config_dir / "providers.json").write_text(json.dumps({
-            "providers": {
-                "mock": {"enabled": True, "type": "mock", "base_url": "http://mock", "auth": {"type": "none"}, "timeout_seconds": 5}
-            }
-        }))
-        (config_dir / "models.json").write_text(json.dumps({
-            "models": {
-                "mock:all": {"provider": "mock", "model": "mock-v1", "enabled": True, "context_window": 32000, "strengths": ["planning", "implementation", "synthesis"], "roles": ["planner", "implementer", "synthesizer"]},
-            }
-        }))
+        (config_dir / "providers.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "mock": {
+                            "enabled": True,
+                            "type": "mock",
+                            "base_url": "http://mock",
+                            "auth": {"type": "none"},
+                            "timeout_seconds": 5,
+                        }
+                    }
+                }
+            )
+        )
+        (config_dir / "models.json").write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "mock:all": {
+                            "provider": "mock",
+                            "model": "mock-v1",
+                            "enabled": True,
+                            "context_window": 32000,
+                            "strengths": ["planning", "implementation", "synthesis"],
+                            "roles": ["planner", "implementer", "synthesizer"],
+                        },
+                    }
+                }
+            )
+        )
 
         orch = Orchestrator(s, config_dir)
         await orch.initialize()
@@ -378,7 +580,7 @@ class TestOrchestratorCouncilEvents:
         assert mock_prov is not None
         mock_prov.set_mock_responses(MOCK_ROLE_RESPONSES)
 
-        result = await orch.execute_goal("fix input validation")
+        await orch.execute_goal("fix input validation")
 
         events = s.event_log.replay()
         event_types = [e["event"] for e in events]
@@ -399,6 +601,7 @@ class TestOrchestratorCouncilEvents:
 # TEST: Fusion config routing
 # =============================================================================
 
+
 class TestFusionRouter:
     def test_select_council_by_task_type(self, tmp_path):
         config_dir = tmp_path / "config"
@@ -406,7 +609,12 @@ class TestFusionRouter:
         cfg = {
             "councils": {
                 "bugfix_default": {"roles": {"planner": {"required": True}}},
-                "coding_default": {"roles": {"planner": {"required": True}, "implementer": {"required": True}}},
+                "coding_default": {
+                    "roles": {
+                        "planner": {"required": True},
+                        "implementer": {"required": True},
+                    }
+                },
             }
         }
         (config_dir / "fusion.json").write_text(json.dumps(cfg))
@@ -435,34 +643,89 @@ class TestFusionRouter:
 # TEST: Mock provider is called with correct role prompts
 # =============================================================================
 
+
 class TestMockProviderCalled:
     @pytest.mark.asyncio
     async def test_mock_receives_per_role_prompts(self, tmp_path):
         """Each role should receive a different system prompt."""
         config_dir = tmp_path / "config"
         config_dir.mkdir()
-        (config_dir / "providers.json").write_text(json.dumps({
-            "providers": {"mock": {"enabled": True, "type": "mock", "base_url": "http://mock", "auth": {"type": "none"}, "timeout_seconds": 5}}
-        }))
-        (config_dir / "models.json").write_text(json.dumps({
-            "models": {
-                "mock:all": {"provider": "mock", "model": "mock-v1", "enabled": True, "context_window": 32000, "strengths": ["planning", "implementation", "fast_scan", "review", "synthesis"], "roles": ["planner", "implementer", "scout", "reviewer", "cheap_verifier", "synthesizer"]},
-            }
-        }))
+        (config_dir / "providers.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "mock": {
+                            "enabled": True,
+                            "type": "mock",
+                            "base_url": "http://mock",
+                            "auth": {"type": "none"},
+                            "timeout_seconds": 5,
+                        }
+                    }
+                }
+            )
+        )
+        (config_dir / "models.json").write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "mock:all": {
+                            "provider": "mock",
+                            "model": "mock-v1",
+                            "enabled": True,
+                            "context_window": 32000,
+                            "strengths": [
+                                "planning",
+                                "implementation",
+                                "fast_scan",
+                                "review",
+                                "synthesis",
+                            ],
+                            "roles": [
+                                "planner",
+                                "implementer",
+                                "scout",
+                                "reviewer",
+                                "cheap_verifier",
+                                "synthesizer",
+                            ],
+                        },
+                    }
+                }
+            )
+        )
 
         registry = ProviderRegistry(config_dir)
         registry.load()
-        assert registry.get("mock").__class__.__module__ == "galaxy_merge.providers.mock"
+        assert (
+            registry.get("mock").__class__.__module__ == "galaxy_merge.providers.mock"
+        )
 
         fusion_config = {
-            "max_parallel_calls": 4, "timeout_seconds": 30,
+            "max_parallel_calls": 4,
+            "timeout_seconds": 30,
             "roles": {
-                "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
-                "scout": {"required": True, "model_selector": {"role": "scout", "cost_policy": "cheap"}},
-                "implementer": {"required": True, "model_selector": {"role": "implementer", "cost_policy": "quality"}},
-                "reviewer": {"required": True, "model_selector": {"role": "reviewer", "cost_policy": "balanced"}},
-                "synthesizer": {"required": True, "model_selector": {"role": "synthesizer", "cost_policy": "quality"}},
-            }
+                "planner": {
+                    "required": True,
+                    "model_selector": {"role": "planner", "cost_policy": "balanced"},
+                },
+                "scout": {
+                    "required": True,
+                    "model_selector": {"role": "scout", "cost_policy": "cheap"},
+                },
+                "implementer": {
+                    "required": True,
+                    "model_selector": {"role": "implementer", "cost_policy": "quality"},
+                },
+                "reviewer": {
+                    "required": True,
+                    "model_selector": {"role": "reviewer", "cost_policy": "balanced"},
+                },
+                "synthesizer": {
+                    "required": True,
+                    "model_selector": {"role": "synthesizer", "cost_policy": "quality"},
+                },
+            },
         }
 
         council = Council(registry, fusion_config, "test goal")
@@ -470,15 +733,18 @@ class TestMockProviderCalled:
         assert mock_prov is not None
         mock_prov.set_mock_responses(MOCK_ROLE_RESPONSES)
 
-        results = await council.execute()
+        await council.execute()
 
         assert mock_prov.call_history, "Mock provider was never called"
-        assert len(mock_prov.call_history) >= 5, "Should have called provider for each of 5 roles"
+        assert len(mock_prov.call_history) >= 5, (
+            "Should have called provider for each of 5 roles"
+        )
 
 
 # =============================================================================
 # TEST: Synthesizer properly handles contradictory reviewer + skeptic
 # =============================================================================
+
 
 class TestFusionContradictions:
     @pytest.mark.asyncio
@@ -486,10 +752,16 @@ class TestFusionContradictions:
         """When reviewer rejects and skeptic blocks, fusion should report issues."""
         syn = Synthesizer()
         results = {
-            "implementer": [{"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}],
-            "reviewer": [{"role": "reviewer", "parsed": CONTRADICTORY_REVIEW["reviewer"]}],
+            "implementer": [
+                {"role": "implementer", "parsed": MOCK_ROLE_RESPONSES["implementer"]}
+            ],
+            "reviewer": [
+                {"role": "reviewer", "parsed": CONTRADICTORY_REVIEW["reviewer"]}
+            ],
             "skeptic": [{"role": "skeptic", "parsed": CONTRADICTORY_REVIEW["skeptic"]}],
         }
         fused = syn.fuse(results)
         assert len(fused.get("errors", [])) == 0
-        assert "eval" in str(fused.get("findings", [])) or "eval" in str(fused.get("contradictions_resolved", []))
+        assert "eval" in str(fused.get("findings", [])) or "eval" in str(
+            fused.get("contradictions_resolved", [])
+        )

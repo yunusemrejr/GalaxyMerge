@@ -6,7 +6,6 @@ Extracted from server.py for modularity.
 import json
 import time
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any
 
 from fastapi.responses import JSONResponse
@@ -70,7 +69,11 @@ def register_notes_routes(app, session, get_orchestrator):
             if content:
                 history_dir = notes_dir / "history"
                 history_dir.mkdir(parents=True, exist_ok=True)
-                atomic_write(history_dir / f"{note_id}_{int(time.time() * 1000)}.md", path.read_text(), _nested_lock=True)
+                atomic_write(
+                    history_dir / f"{note_id}_{int(time.time() * 1000)}.md",
+                    path.read_text(),
+                    _nested_lock=True,
+                )
                 atomic_write(path, content, _nested_lock=True)
                 index = _load_notes_index(notes_dir)
                 for item in index.get("notes", []):
@@ -92,7 +95,9 @@ def register_notes_routes(app, session, get_orchestrator):
             if not old_path.exists():
                 return JSONResponse(content={"error": "not found"}, status_code=404)
             if new_path.exists():
-                return JSONResponse(content={"error": "target already exists"}, status_code=409)
+                return JSONResponse(
+                    content={"error": "target already exists"}, status_code=409
+                )
             old_path.rename(new_path)
             index = _load_notes_index(index_path, {"schema_version": 1, "notes": []})
             updated = False
@@ -105,15 +110,17 @@ def register_notes_routes(app, session, get_orchestrator):
                     updated = True
                     break
             if not updated:
-                index.setdefault("notes", []).append({
-                    "id": f"note_{new_name}",
-                    "path": new_path.name,
-                    "title": new_name,
-                    "tags": [],
-                    "pinned": False,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                })
+                index.setdefault("notes", []).append(
+                    {
+                        "id": f"note_{new_name}",
+                        "path": new_path.name,
+                        "title": new_name,
+                        "tags": [],
+                        "pinned": False,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             _save_data = json.dumps(index, indent=2)
             atomic_write(index_path, _save_data)
         return {"status": "renamed", "from": note_id, "to": new_name}
@@ -123,7 +130,9 @@ def register_notes_routes(app, session, get_orchestrator):
         notes_dir = session.gm_dir / "notes"
         tags = data.get("tags", [])
         if not isinstance(tags, list):
-            return JSONResponse(content={"error": "tags must be a list"}, status_code=400)
+            return JSONResponse(
+                content={"error": "tags must be a list"}, status_code=400
+            )
         normalized = []
         for tag in tags:
             tag_value = str(tag).strip()
@@ -208,7 +217,9 @@ def register_notes_routes(app, session, get_orchestrator):
         trash_path = notes_dir / ".trash" / f"{note_id}.md"
         with FileLock(notes_dir / ".notes.lock", timeout=10.0):
             if not trash_path.exists():
-                return JSONResponse(content={"error": "not found in trash"}, status_code=404)
+                return JSONResponse(
+                    content={"error": "not found in trash"}, status_code=404
+                )
             target = notes_dir / f"{note_id}.md"
             if target.exists():
                 return JSONResponse(content={"error": "note exists"}, status_code=409)
@@ -224,7 +235,9 @@ def register_notes_routes(app, session, get_orchestrator):
         if not notes_dir.exists():
             return {"query": q, "results": [], "count": 0}
 
-        index_payload = _load_notes_index(notes_dir / "index.json", {"schema_version": 1, "notes": []})
+        index_payload = _load_notes_index(
+            notes_dir / "index.json", {"schema_version": 1, "notes": []}
+        )
         index_map = {}
         for item in index_payload.get("notes", []):
             if not isinstance(item, dict):
@@ -246,16 +259,18 @@ def register_notes_routes(app, session, get_orchestrator):
             matched = q_lower in content.lower() or q_lower in f.stem.lower()
             if matched:
                 item = index_map.get(f.stem, {})
-                results.append({
-                    "name": f.stem,
-                    "path": item.get("path", f"{f.stem}.md"),
-                    "title": item.get("title", f.stem),
-                    "tags": item.get("tags", []),
-                    "pinned": bool(item.get("pinned", False)),
-                    "created_at": item.get("created_at", ""),
-                    "updated_at": item.get("updated_at", ""),
-                    "preview": content[:200],
-                })
+                results.append(
+                    {
+                        "name": f.stem,
+                        "path": item.get("path", f"{f.stem}.md"),
+                        "title": item.get("title", f.stem),
+                        "tags": item.get("tags", []),
+                        "pinned": bool(item.get("pinned", False)),
+                        "created_at": item.get("created_at", ""),
+                        "updated_at": item.get("updated_at", ""),
+                        "preview": content[:200],
+                    }
+                )
         total = len(results)
         if limit is not None:
             limit = max(1, min(int(limit), 250))
@@ -265,6 +280,7 @@ def register_notes_routes(app, session, get_orchestrator):
     @app.post("/api/notes/{note_id}/inject")
     async def inject_note(note_id: str):
         from galaxy_merge.tools.notes_tools import _injected_by_gm_dir
+
         notes_dir = session.gm_dir / "notes"
         path = notes_dir / f"{note_id}.md"
         if not path.exists():
@@ -275,6 +291,7 @@ def register_notes_routes(app, session, get_orchestrator):
     @app.get("/api/notes/injected")
     async def get_injected_notes():
         from galaxy_merge.tools.notes_tools import get_injected_notes
+
         return {"injected": get_injected_notes(session.gm_dir)}
 
     @app.get("/api/notes/history")
@@ -295,7 +312,11 @@ def register_notes_routes(app, session, get_orchestrator):
         trash_dir = notes_dir / ".trash"
         if not trash_dir.exists():
             return {"notes": []}
-        files = [f for f in sorted(trash_dir.iterdir()) if f.suffix in (".md", ".txt", ".json")]
+        files = [
+            f
+            for f in sorted(trash_dir.iterdir())
+            if f.suffix in (".md", ".txt", ".json")
+        ]
         notes = [{"name": f.stem, "path": f.name} for f in files]
         return {"notes": notes}
 

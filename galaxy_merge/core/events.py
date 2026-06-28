@@ -28,7 +28,9 @@ class EventLog:
         if not self.path.exists():
             return []
         lock_path = self.path.with_suffix(self.path.suffix + ".lock")
-        import fcntl, os
+        import fcntl
+        import os
+
         fd = None
         try:
             fd = os.open(str(lock_path), os.O_CREAT | os.O_RDWR, 0o644)
@@ -54,7 +56,9 @@ class EventLog:
                 except OSError:
                     pass
 
-    def replay_from(self, offset: int = 0, limit: int | None = None) -> list[dict[str, Any]]:
+    def replay_from(
+        self, offset: int = 0, limit: int | None = None
+    ) -> list[dict[str, Any]]:
         records = self.replay()
         if offset <= 0:
             offset = 0
@@ -62,4 +66,4 @@ class EventLog:
             return records[offset:]
         if limit <= 0:
             return []
-        return records[offset:offset + limit]
+        return records[offset : offset + limit]

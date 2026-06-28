@@ -10,11 +10,21 @@ class ProviderCache:
         self.store = CacheStore(cache_dir / "provider")
         self.cache_dir = cache_dir
 
-    def get(self, provider_id: str, model: str, role: str, messages: list[dict[str, str]]) -> dict[str, Any] | None:
+    def get(
+        self, provider_id: str, model: str, role: str, messages: list[dict[str, str]]
+    ) -> dict[str, Any] | None:
         key = provider_cache_key(provider_id, model, role, hash_messages(messages))
         return self.store.get(key)
 
-    def set(self, provider_id: str, model: str, role: str, messages: list[dict[str, str]], result: dict[str, Any], ttl: int = 300) -> None:
+    def set(
+        self,
+        provider_id: str,
+        model: str,
+        role: str,
+        messages: list[dict[str, str]],
+        result: dict[str, Any],
+        ttl: int = 300,
+    ) -> None:
         key = provider_cache_key(provider_id, model, role, hash_messages(messages))
         self.store.set(key, result, ttl_seconds=ttl)
 

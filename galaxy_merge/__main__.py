@@ -11,9 +11,7 @@ def main() -> int:
         prog="gm",
         description="Galaxy Merge Harness — autonomous coding harness",
     )
-    parser.add_argument(
-        "--version", action="store_true", help="print version and exit"
-    )
+    parser.add_argument("--version", action="store_true", help="print version and exit")
     parser.add_argument("--no-browser", action="store_true", help="do not open browser")
     parser.add_argument("--port", type=int, default=0, help="server port (0 = auto)")
     parser.add_argument(
@@ -22,9 +20,7 @@ def main() -> int:
         default=None,
         help="explicit project directory",
     )
-    parser.add_argument(
-        "--resume", type=str, default=None, help="session ID to resume"
-    )
+    parser.add_argument("--resume", type=str, default=None, help="session ID to resume")
     parser.add_argument("--doctor", action="store_true", help="run diagnostics")
 
     args = parser.parse_args()

@@ -8,9 +8,13 @@ from galaxy_merge.locations.classifier import LocationClassifier
 from galaxy_merge.locations.deployment_policy import DeploymentPolicy
 
 
-def make_shell_tools(workroot: Path, safety: SafetyGovernor, sandbox: Sandbox,
-                     location_classifier: LocationClassifier | None = None,
-                     deployment_policy: DeploymentPolicy | None = None) -> list[tuple[ToolSchema, Any]]:
+def make_shell_tools(
+    workroot: Path,
+    safety: SafetyGovernor,
+    sandbox: Sandbox,
+    location_classifier: LocationClassifier | None = None,
+    deployment_policy: DeploymentPolicy | None = None,
+) -> list[tuple[ToolSchema, Any]]:
     tools = []
 
     async def shell_run(
@@ -56,13 +60,21 @@ def make_shell_tools(workroot: Path, safety: SafetyGovernor, sandbox: Sandbox,
             },
         )
 
-    tools.append((
-        ToolSchema("shell.run", "Run a shell command in a sandboxed environment", mutates=True, requires_safety=True, parameters={
-            "command": {"type": "string", "required": True},
-            "cwd": {"type": "string", "default": None},
-            "timeout": {"type": "integer", "default": 60},
-        }),
-        shell_run,
-    ))
+    tools.append(
+        (
+            ToolSchema(
+                "shell.run",
+                "Run a shell command in a sandboxed environment",
+                mutates=True,
+                requires_safety=True,
+                parameters={
+                    "command": {"type": "string", "required": True},
+                    "cwd": {"type": "string", "default": None},
+                    "timeout": {"type": "integer", "default": 60},
+                },
+            ),
+            shell_run,
+        )
+    )
 
     return tools

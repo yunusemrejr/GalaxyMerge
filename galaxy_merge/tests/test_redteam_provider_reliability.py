@@ -1,63 +1,86 @@
-"""
-Red-team: Provider/Council/Fusion reliability.
+"""Red-team: Provider/Council/Fusion reliability.
 
 Simulates every failure mode listed in the red-team spec and verifies
 council behavior, event logging, fallback, timeout, degraded mode, etc.
 """
 
-import pytest
-
-pytestmark = [pytest.mark.unit]
-
-
 import asyncio
 import json
-import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
-from unittest.mock import MagicMock, patch
 
 import pytest
 
-from galaxy_merge.fusion.council import Council
-from galaxy_merge.fusion.router import FusionRouter
-from galaxy_merge.fusion.synthesizer import Synthesizer
-from galaxy_merge.fusion.reviewer import review_fusion_result
-from galaxy_merge.fusion.schemas import ROLE_SCHEMAS
-from galaxy_merge.fusion.roles import ROLE_DEFINITIONS
-from galaxy_merge.providers.registry import ProviderRegistry
-from galaxy_merge.providers.base import ProviderBase
 from galaxy_merge.core.events import EventLog
-from galaxy_merge.core.goal import GoalEngine
+from galaxy_merge.fusion.council import Council
+from galaxy_merge.fusion.roles import ROLE_DEFINITIONS
+from galaxy_merge.fusion.synthesizer import Synthesizer
+from galaxy_merge.providers.base import ProviderBase
+from galaxy_merge.providers.registry import ProviderRegistry
+
+pytestmark = [pytest.mark.unit]
 
 
 # =============================================================================
 # Failure-simulating MockProvider
 # =============================================================================
 
+
 class MockFailureProvider(ProviderBase):
     """Mock provider that can simulate arbitrary failure modes per role."""
 
     FAILURE_MODES = {
-        "api_key_missing": {"success": False, "error": "HTTP 401: invalid_api_key — Authentication Fails"},
-        "endpoint_invalid": {"success": False, "error": "HTTP 404: Not Found — endpoint does not exist"},
+        "api_key_missing": {
+            "success": False,
+            "error": "HTTP 401: invalid_api_key — Authentication Fails",
+        },
+        "endpoint_invalid": {
+            "success": False,
+            "error": "HTTP 404: Not Found — endpoint does not exist",
+        },
         "http_401": {"success": False, "error": "HTTP 401: Unauthorized"},
-        "http_429": {"success": False, "error": "HTTP 429: Too Many Requests — rate limit exceeded"},
+        "http_429": {
+            "success": False,
+            "error": "HTTP 429: Too Many Requests — rate limit exceeded",
+        },
         "http_500": {"success": False, "error": "HTTP 500: Internal Server Error"},
         "timeout": {"success": False, "error": "request timed out"},
-        "partial_stream": {"success": False, "error": "connection closed before complete response"},
-        "malformed_json": {"success": True, "content": '{"steps": ["do x"], "completion_criteria": ["works"] ,,, '},
-        "invalid_tool_call": {"success": True, "content": '{"nonexistent_action": {"cmd": "rm -rf /"}}'},
-        "model_refuses": {"success": True, "content": 'I cannot complete this task as it may be harmful.'},
+        "partial_stream": {
+            "success": False,
+            "error": "connection closed before complete response",
+        },
+        "malformed_json": {
+            "success": True,
+            "content": '{"steps": ["do x"], "completion_criteria": ["works"] ,,, ',
+        },
+        "invalid_tool_call": {
+            "success": True,
+            "content": '{"nonexistent_action": {"cmd": "rm -rf /"}}',
+        },
+        "model_refuses": {
+            "success": True,
+            "content": "I cannot complete this task as it may be harmful.",
+        },
         "too_slow": {"success": False, "error": "request timed out after 300s"},
-        "context_exceeded": {"success": False, "error": "HTTP 400: context_length_exceeded — input too long"},
-        "irrelevant_output": {"success": True, "content": '{"result": "The capital of France is Paris."}'},
+        "context_exceeded": {
+            "success": False,
+            "error": "HTTP 400: context_length_exceeded — input too long",
+        },
+        "irrelevant_output": {
+            "success": True,
+            "content": '{"result": "The capital of France is Paris."}',
+        },
         "healthy": {"success": True, "content": ""},
     }
 
-    def __init__(self, provider_id: str, config: dict[str, Any], event_log: EventLog | None = None):
+    def __init__(
+        self,
+        provider_id: str,
+        config: dict[str, Any],
+        event_log: EventLog | None = None,
+    ):
         super().__init__(provider_id, config)
         self._failure_map: dict[str, str] = {}  # role -> failure_mode
         self._responses: dict[str, dict[str, Any]] = {}
@@ -78,7 +101,9 @@ class MockFailureProvider(ProviderBase):
     def set_healthy(self, healthy: bool):
         self._healthy = healthy
 
-    async def chat_completion(self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs):
+    async def chat_completion(
+        self, messages, model, temperature=0.7, max_tokens=None, stream=False, **kwargs
+    ):
         if self._delay > 0:
             await asyncio.sleep(self._delay)
 
@@ -94,16 +119,20 @@ class MockFailureProvider(ProviderBase):
                 if not role and "synthesizer" in content:
                     role = "synthesizer"
 
-        self.call_history.append({
-            "role": role,
-            "model": model,
-            "provider": self.provider_id,
-            "timestamp": datetime.now(timezone.utc).isoformat(),
-        })
+        self.call_history.append(
+            {
+                "role": role,
+                "model": model,
+                "provider": self.provider_id,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+            }
+        )
 
         failure_mode = self._failure_map.get(role)
         if failure_mode:
-            result = dict(self.FAILURE_MODES.get(failure_mode, {"success": True, "content": ""}))
+            result = dict(
+                self.FAILURE_MODES.get(failure_mode, {"success": True, "content": ""})
+            )
             # For malformed JSON, fill in the role content
             if failure_mode == "malformed_json" and result.get("success"):
                 result["content"] = result["content"]
@@ -118,8 +147,18 @@ class MockFailureProvider(ProviderBase):
 
         # Return role-specific mock response or default
         response_data = self._responses.get(role, {})
-        content = json.dumps(response_data) if response_data else json.dumps({"raw": "mock ok"})
-        return {"success": True, "content": content, "model": model, "usage": {}, "provider": self.provider_id}
+        content = (
+            json.dumps(response_data)
+            if response_data
+            else json.dumps({"raw": "mock ok"})
+        )
+        return {
+            "success": True,
+            "content": content,
+            "model": model,
+            "usage": {},
+            "provider": self.provider_id,
+        }
 
     async def check_health(self):
         return self._healthy
@@ -146,12 +185,23 @@ MOCK_SUCCESS_RESPONSES = {
     },
     "implementer": {
         "changes": [
-            {"file": "src/main.py", "action": "edit", "diff": "+def validate():pass", "rationale": "add validation"},
+            {
+                "file": "src/main.py",
+                "action": "edit",
+                "diff": "+def validate():pass",
+                "rationale": "add validation",
+            },
         ]
     },
     "reviewer": {
         "findings": [
-            {"type": "info", "file": "src/main.py", "evidence": "looks ok", "severity": "low", "recommendation": "none"},
+            {
+                "type": "info",
+                "file": "src/main.py",
+                "evidence": "looks ok",
+                "severity": "low",
+                "recommendation": "none",
+            },
         ],
         "risks": [],
         "approved": True,
@@ -163,13 +213,24 @@ MOCK_SUCCESS_RESPONSES = {
     },
     "cheap_verifier": {
         "findings": [
-            {"type": "info", "file": "src/main.py", "evidence": "syntax ok", "severity": "low"},
+            {
+                "type": "info",
+                "file": "src/main.py",
+                "evidence": "syntax ok",
+                "severity": "low",
+            },
         ],
         "syntax_ok": True,
         "summary": "looks good",
     },
     "synthesizer": {
-        "plan": [{"tool": "file.write", "params": {"path": "src/main.py"}, "rationale": "add validation"}],
+        "plan": [
+            {
+                "tool": "file.write",
+                "params": {"path": "src/main.py"},
+                "rationale": "add validation",
+            }
+        ],
         "summary": "Changes to src/main.py",
         "contradictions_resolved": [],
     },
@@ -196,13 +257,35 @@ def _make_minimal_fusion_config():
         "retry_backoff": 0,
         "retry_backoff_max": 0,
         "roles": {
-            "planner": {"required": True, "model_selector": {"role": "planner", "cost_policy": "balanced"}},
-            "scout": {"required": True, "model_selector": {"role": "scout", "cost_policy": "cheap"}},
-            "implementer": {"required": True, "model_selector": {"role": "implementer", "cost_policy": "quality"}},
-            "reviewer": {"required": True, "model_selector": {"role": "reviewer", "cost_policy": "balanced"}},
-            "skeptic": {"required": True, "model_selector": {"role": "skeptic", "cost_policy": "balanced"}},
-            "cheap_verifier": {"required": True, "count": 1, "model_selector": {"role": "cheap_verifier", "cost_policy": "cheap"}},
-            "synthesizer": {"required": True, "model_selector": {"role": "synthesizer", "cost_policy": "quality"}},
+            "planner": {
+                "required": True,
+                "model_selector": {"role": "planner", "cost_policy": "balanced"},
+            },
+            "scout": {
+                "required": True,
+                "model_selector": {"role": "scout", "cost_policy": "cheap"},
+            },
+            "implementer": {
+                "required": True,
+                "model_selector": {"role": "implementer", "cost_policy": "quality"},
+            },
+            "reviewer": {
+                "required": True,
+                "model_selector": {"role": "reviewer", "cost_policy": "balanced"},
+            },
+            "skeptic": {
+                "required": True,
+                "model_selector": {"role": "skeptic", "cost_policy": "balanced"},
+            },
+            "cheap_verifier": {
+                "required": True,
+                "count": 1,
+                "model_selector": {"role": "cheap_verifier", "cost_policy": "cheap"},
+            },
+            "synthesizer": {
+                "required": True,
+                "model_selector": {"role": "synthesizer", "cost_policy": "quality"},
+            },
         },
     }
 
@@ -211,30 +294,153 @@ def _setup_multi_provider_config(config_dir, event_log=None):
     """Set up config with multiple providers for fallback testing."""
     providers_json = {
         "providers": {
-            "mock_a": {"enabled": True, "type": "mock", "base_url": "http://mock-a", "auth": {"type": "none"}, "timeout_seconds": 5},
-            "mock_b": {"enabled": True, "type": "mock", "base_url": "http://mock-b", "auth": {"type": "none"}, "timeout_seconds": 5},
-            "mock_c": {"enabled": True, "type": "mock", "base_url": "http://mock-c", "auth": {"type": "none"}, "timeout_seconds": 5},
+            "mock_a": {
+                "enabled": True,
+                "type": "mock",
+                "base_url": "http://mock-a",
+                "auth": {"type": "none"},
+                "timeout_seconds": 5,
+            },
+            "mock_b": {
+                "enabled": True,
+                "type": "mock",
+                "base_url": "http://mock-b",
+                "auth": {"type": "none"},
+                "timeout_seconds": 5,
+            },
+            "mock_c": {
+                "enabled": True,
+                "type": "mock",
+                "base_url": "http://mock-c",
+                "auth": {"type": "none"},
+                "timeout_seconds": 5,
+            },
         }
     }
     (config_dir / "providers.json").write_text(json.dumps(providers_json))
 
     models_json = {
         "models": {
-            "mock_a:planner": {"provider": "mock_a", "model": "mock-v1", "enabled": True, "context_window": 32000, "strengths": ["planning"], "roles": ["planner", "synthesizer"]},
-            "mock_b:planner": {"provider": "mock_b", "model": "mock-v2", "enabled": True, "context_window": 32000, "strengths": ["planning"], "roles": ["planner", "synthesizer"]},
-            "mock_c:planner": {"provider": "mock_c", "model": "mock-v3", "enabled": True, "context_window": 32000, "strengths": ["planning"], "roles": ["planner", "synthesizer"]},
-            "mock_a:scout": {"provider": "mock_a", "model": "mock-s1", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
-            "mock_b:scout": {"provider": "mock_b", "model": "mock-s2", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
-            "mock_c:scout": {"provider": "mock_c", "model": "mock-s3", "enabled": True, "context_window": 32000, "strengths": ["fast_scan"], "roles": ["scout", "cheap_verifier"]},
-            "mock_a:implementer": {"provider": "mock_a", "model": "mock-i1", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
-            "mock_b:implementer": {"provider": "mock_b", "model": "mock-i2", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
-            "mock_c:implementer": {"provider": "mock_c", "model": "mock-i3", "enabled": True, "context_window": 32000, "strengths": ["coding"], "roles": ["implementer"]},
-            "mock_a:reviewer": {"provider": "mock_a", "model": "mock-r1", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
-            "mock_b:reviewer": {"provider": "mock_b", "model": "mock-r2", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
-            "mock_c:reviewer": {"provider": "mock_c", "model": "mock-r3", "enabled": True, "context_window": 64000, "strengths": ["review"], "roles": ["reviewer"]},
-            "mock_a:skeptic": {"provider": "mock_a", "model": "mock-sk1", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
-            "mock_b:skeptic": {"provider": "mock_b", "model": "mock-sk2", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
-            "mock_c:skeptic": {"provider": "mock_c", "model": "mock-sk3", "enabled": True, "context_window": 64000, "strengths": ["skepticism"], "roles": ["skeptic"]},
+            "mock_a:planner": {
+                "provider": "mock_a",
+                "model": "mock-v1",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["planning"],
+                "roles": ["planner", "synthesizer"],
+            },
+            "mock_b:planner": {
+                "provider": "mock_b",
+                "model": "mock-v2",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["planning"],
+                "roles": ["planner", "synthesizer"],
+            },
+            "mock_c:planner": {
+                "provider": "mock_c",
+                "model": "mock-v3",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["planning"],
+                "roles": ["planner", "synthesizer"],
+            },
+            "mock_a:scout": {
+                "provider": "mock_a",
+                "model": "mock-s1",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["fast_scan"],
+                "roles": ["scout", "cheap_verifier"],
+            },
+            "mock_b:scout": {
+                "provider": "mock_b",
+                "model": "mock-s2",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["fast_scan"],
+                "roles": ["scout", "cheap_verifier"],
+            },
+            "mock_c:scout": {
+                "provider": "mock_c",
+                "model": "mock-s3",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["fast_scan"],
+                "roles": ["scout", "cheap_verifier"],
+            },
+            "mock_a:implementer": {
+                "provider": "mock_a",
+                "model": "mock-i1",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["coding"],
+                "roles": ["implementer"],
+            },
+            "mock_b:implementer": {
+                "provider": "mock_b",
+                "model": "mock-i2",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["coding"],
+                "roles": ["implementer"],
+            },
+            "mock_c:implementer": {
+                "provider": "mock_c",
+                "model": "mock-i3",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": ["coding"],
+                "roles": ["implementer"],
+            },
+            "mock_a:reviewer": {
+                "provider": "mock_a",
+                "model": "mock-r1",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["review"],
+                "roles": ["reviewer"],
+            },
+            "mock_b:reviewer": {
+                "provider": "mock_b",
+                "model": "mock-r2",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["review"],
+                "roles": ["reviewer"],
+            },
+            "mock_c:reviewer": {
+                "provider": "mock_c",
+                "model": "mock-r3",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["review"],
+                "roles": ["reviewer"],
+            },
+            "mock_a:skeptic": {
+                "provider": "mock_a",
+                "model": "mock-sk1",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["skepticism"],
+                "roles": ["skeptic"],
+            },
+            "mock_b:skeptic": {
+                "provider": "mock_b",
+                "model": "mock-sk2",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["skepticism"],
+                "roles": ["skeptic"],
+            },
+            "mock_c:skeptic": {
+                "provider": "mock_c",
+                "model": "mock-sk3",
+                "enabled": True,
+                "context_window": 64000,
+                "strengths": ["skepticism"],
+                "roles": ["skeptic"],
+            },
         }
     }
     (config_dir / "models.json").write_text(json.dumps(models_json))
@@ -245,13 +451,40 @@ def _setup_single_mock_config(config_dir):
     """Set up config with a single mock provider."""
     providers_json = {
         "providers": {
-            "mock": {"enabled": True, "type": "mock", "base_url": "http://mock", "auth": {"type": "none"}, "timeout_seconds": 5},
+            "mock": {
+                "enabled": True,
+                "type": "mock",
+                "base_url": "http://mock",
+                "auth": {"type": "none"},
+                "timeout_seconds": 5,
+            },
         }
     }
     (config_dir / "providers.json").write_text(json.dumps(providers_json))
     models_json = {
         "models": {
-            "mock:all": {"provider": "mock", "model": "mock-v1", "enabled": True, "context_window": 32000, "strengths": ["planning", "implementation", "fast_scan", "review", "synthesis"], "roles": ["planner", "implementer", "scout", "reviewer", "cheap_verifier", "synthesizer", "skeptic"]},
+            "mock:all": {
+                "provider": "mock",
+                "model": "mock-v1",
+                "enabled": True,
+                "context_window": 32000,
+                "strengths": [
+                    "planning",
+                    "implementation",
+                    "fast_scan",
+                    "review",
+                    "synthesis",
+                ],
+                "roles": [
+                    "planner",
+                    "implementer",
+                    "scout",
+                    "reviewer",
+                    "cheap_verifier",
+                    "synthesizer",
+                    "skeptic",
+                ],
+            },
         }
     }
     (config_dir / "models.json").write_text(json.dumps(models_json))
@@ -264,7 +497,7 @@ def _create_registry(config_dir, event_log=None):
     # Replace any MockProvider instances with MockFailureProvider for failure simulation
     replacements = {}
     for pid, prov in list(registry._providers.items()):
-        if prov.__class__.__name__ == 'MockProvider':
+        if prov.__class__.__name__ == "MockProvider":
             cfg = prov.config
             new_prov = MockFailureProvider(pid, cfg, event_log)
             replacements[pid] = new_prov
@@ -275,12 +508,15 @@ def _create_registry(config_dir, event_log=None):
 def _create_council(registry, config=None, goal=GOAL):
     if config is None:
         config = _make_minimal_fusion_config()
-    return Council(registry, config, goal, event_log=getattr(registry, "_event_log", None))
+    return Council(
+        registry, config, goal, event_log=getattr(registry, "_event_log", None)
+    )
 
 
 # =============================================================================
 # RED-TEAM TEST SUITE
 # =============================================================================
+
 
 class TestProviderFailures:
     """Test each provider failure mode individually."""
@@ -294,12 +530,18 @@ class TestProviderFailures:
 
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "api_key_missing")
-        mock_prov.set_role_response("implementer", MOCK_SUCCESS_RESPONSES["implementer"])
+        mock_prov.set_role_response(
+            "implementer", MOCK_SUCCESS_RESPONSES["implementer"]
+        )
         mock_prov.set_role_response("scout", MOCK_SUCCESS_RESPONSES["scout"])
         mock_prov.set_role_response("reviewer", MOCK_SUCCESS_RESPONSES["reviewer"])
         mock_prov.set_role_response("skeptic", MOCK_SUCCESS_RESPONSES["skeptic"])
-        mock_prov.set_role_response("cheap_verifier", MOCK_SUCCESS_RESPONSES["cheap_verifier"])
-        mock_prov.set_role_response("synthesizer", MOCK_SUCCESS_RESPONSES["synthesizer"])
+        mock_prov.set_role_response(
+            "cheap_verifier", MOCK_SUCCESS_RESPONSES["cheap_verifier"]
+        )
+        mock_prov.set_role_response(
+            "synthesizer", MOCK_SUCCESS_RESPONSES["synthesizer"]
+        )
 
         results = await council.execute()
         planner_results = results.get("planner", [])
@@ -308,8 +550,10 @@ class TestProviderFailures:
         planner_errors = [r for r in planner_results if "error" in r]
         if planner_errors:
             err = planner_errors[0]["error"].lower()
-            assert any(kw in err for kw in ["no healthy", "all attempts", "401", "500", "429", "timeout"]), \
-                f"Unexpected planner error: {planner_errors[0]['error']}"
+            assert any(
+                kw in err
+                for kw in ["no healthy", "all attempts", "401", "500", "429", "timeout"]
+            ), f"Unexpected planner error: {planner_errors[0]['error']}"
 
     @pytest.mark.asyncio
     async def test_provider_endpoint_invalid(self, config_dir, event_log):
@@ -322,7 +566,9 @@ class TestProviderFailures:
         self._set_all_but(mock_prov, "implementer")
         results = await council.execute()
         impl_results = results.get("implementer", [])
-        assert any("error" in r for r in impl_results), "Implementer should report error for invalid endpoint"
+        assert any("error" in r for r in impl_results), (
+            "Implementer should report error for invalid endpoint"
+        )
 
     @pytest.mark.asyncio
     async def test_provider_returns_401(self, config_dir, event_log):
@@ -377,7 +623,9 @@ class TestProviderFailures:
         assert syn_errors, "Synthesizer should report timeout error"
 
     @pytest.mark.asyncio
-    async def test_provider_streams_partial_then_disconnect(self, config_dir, event_log):
+    async def test_provider_streams_partial_then_disconnect(
+        self, config_dir, event_log
+    ):
         """Partial stream → disconnect."""
         _setup_single_mock_config(config_dir)
         registry = _create_registry(config_dir, event_log)
@@ -424,9 +672,19 @@ class TestProviderFailures:
 
     def _set_all_but(self, mock_prov, exclude_role):
         """Set all roles except one to healthy responses."""
-        for role_name in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for role_name in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             if role_name != exclude_role:
-                mock_prov.set_role_response(role_name, MOCK_SUCCESS_RESPONSES.get(role_name, {}))
+                mock_prov.set_role_response(
+                    role_name, MOCK_SUCCESS_RESPONSES.get(role_name, {})
+                )
 
 
 class TestModelFailures:
@@ -442,7 +700,14 @@ class TestModelFailures:
         mock_prov.set_role_failure("planner", "model_refuses")
         self._set_all_but_hack(mock_prov)
         # For other roles, make them succeed
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
         results = await council.execute()
         planner_results = results.get("planner", [])
@@ -459,7 +724,14 @@ class TestModelFailures:
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "too_slow")
         self._set_all_but_hack(mock_prov)
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
         results = await council.execute()
         planner_errors = [r for r in results.get("planner", []) if "error" in r]
@@ -474,7 +746,14 @@ class TestModelFailures:
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("implementer", "context_exceeded")
         self._set_all_but_hack(mock_prov)
-        for r in ["planner", "scout", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "planner",
+            "scout",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
         results = await council.execute()
         impl_errors = [r for r in results.get("implementer", []) if "error" in r]
@@ -489,7 +768,14 @@ class TestModelFailures:
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "irrelevant_output")
         self._set_all_but_hack(mock_prov)
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
         results = await council.execute()
         planner_results = results.get("planner", [])
@@ -497,11 +783,12 @@ class TestModelFailures:
         # Schema validation now catches irrelevant output (missing required fields)
         # This is correct behavior — reject irrelevant responses
         has_error = any("error" in r for r in planner_results)
-        has_missing_fields = any("missing required fields" in str(r) for r in planner_results)
         # Either the output is caught by schema validation (error) or parsed as raw
         if not has_error:
             parsed = planner_results[0].get("parsed", {})
-            assert parsed.get("raw") or parsed.get("result"), "Irrelevant output captured"
+            assert parsed.get("raw") or parsed.get("result"), (
+                "Irrelevant output captured"
+            )
 
     def _set_all_but_hack(self, mock_prov):
         """Set minimal responses for all roles."""
@@ -526,9 +813,12 @@ class TestCouncilRoleFailures:
         mock_a.set_role_failure("planner", "http_500")
         # Set success responses for all roles on all providers
         for role, resp in MOCK_SUCCESS_RESPONSES.items():
-            if mock_a: mock_a.set_role_response(role, resp)
-            if mock_b: mock_b.set_role_response(role, resp)
-            if mock_c: mock_c.set_role_response(role, resp)
+            if mock_a:
+                mock_a.set_role_response(role, resp)
+            if mock_b:
+                mock_b.set_role_response(role, resp)
+            if mock_c:
+                mock_c.set_role_response(role, resp)
 
         results = await council.execute()
         # Planner should have at least one success (via fallback)
@@ -538,7 +828,9 @@ class TestCouncilRoleFailures:
         # Note: fallback currently tries first alternate provider
         has_success = len(success_results) > 0
         has_error = any("error" in r for r in planner_results)
-        assert has_success or has_error, "Planner should either succeed via fallback or report failure"
+        assert has_success or has_error, (
+            "Planner should either succeed via fallback or report failure"
+        )
 
     @pytest.mark.asyncio
     async def test_multiple_council_roles_fail(self, config_dir, event_log):
@@ -569,12 +861,21 @@ class TestCouncilRoleFailures:
         council = _create_council(registry)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("synthesizer", "http_500")
-        for r in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier"]:
+        for r in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
         syn_results = results.get("synthesizer", [])
-        assert any("error" in r for r in syn_results), "Synthesizer failure must be reported"
+        assert any("error" in r for r in syn_results), (
+            "Synthesizer failure must be reported"
+        )
 
     @pytest.mark.asyncio
     async def test_reviewer_fails(self, config_dir, event_log):
@@ -584,12 +885,21 @@ class TestCouncilRoleFailures:
         council = _create_council(registry)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("reviewer", "http_500")
-        for r in ["planner", "scout", "implementer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "planner",
+            "scout",
+            "implementer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
         rev_results = results.get("reviewer", [])
-        assert any("error" in r for r in rev_results), "Reviewer failure must be reported"
+        assert any("error" in r for r in rev_results), (
+            "Reviewer failure must be reported"
+        )
 
     @pytest.mark.asyncio
     async def test_cheap_verifier_fails(self, config_dir, event_log):
@@ -599,15 +909,26 @@ class TestCouncilRoleFailures:
         council = _create_council(registry)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("cheap_verifier", "http_500")
-        for r in ["planner", "scout", "implementer", "reviewer", "skeptic", "synthesizer"]:
+        for r in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
         cv_results = results.get("cheap_verifier", [])
-        assert any("error" in r for r in cv_results), "Cheap verifier failure must be reported"
+        assert any("error" in r for r in cv_results), (
+            "Cheap verifier failure must be reported"
+        )
         # Other roles should still have succeeded
         assert "error" not in results.get("planner", [{}])[0], "Planner should succeed"
-        assert "error" not in results.get("reviewer", [{}])[0], "Reviewer should succeed"
+        assert "error" not in results.get("reviewer", [{}])[0], (
+            "Reviewer should succeed"
+        )
 
     @pytest.mark.asyncio
     async def test_all_but_one_provider_fail(self, config_dir, event_log):
@@ -627,9 +948,12 @@ class TestCouncilRoleFailures:
         # mock_c is fine
 
         for role, resp in MOCK_SUCCESS_RESPONSES.items():
-            if mock_a: mock_a.set_role_response(role, resp)
-            if mock_b: mock_b.set_role_response(role, resp)
-            if mock_c: mock_c.set_role_response(role, resp)
+            if mock_a:
+                mock_a.set_role_response(role, resp)
+            if mock_b:
+                mock_b.set_role_response(role, resp)
+            if mock_c:
+                mock_c.set_role_response(role, resp)
 
         results = await council.execute()
         planner_results = results.get("planner", [])
@@ -649,15 +973,32 @@ class TestCouncilRoleFailures:
         mock_c = registry.get("mock_c")
 
         # Kill every provider for every role
-        for role_name in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for role_name in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             for m in [mock_a, mock_b, mock_c]:
-                if m: m.set_role_failure(role_name, "http_500")
+                if m:
+                    m.set_role_failure(role_name, "http_500")
 
         results = await council.execute()
         # All roles should have errors
         all_have_errors = all(
             any("error" in r for r in results.get(role, [{"error": "missing"}]))
-            for role in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]
+            for role in [
+                "planner",
+                "scout",
+                "implementer",
+                "reviewer",
+                "skeptic",
+                "cheap_verifier",
+                "synthesizer",
+            ]
         )
         assert all_have_errors, "All roles should report errors when all providers fail"
 
@@ -684,15 +1025,18 @@ class TestFallbackBehavior:
         # Only planner on mock_a fails
         mock_a.set_role_failure("planner", "http_500")
         for role, resp in MOCK_SUCCESS_RESPONSES.items():
-            if mock_a: mock_a.set_role_response(role, resp)
-            if mock_b: mock_b.set_role_response(role, resp)
+            if mock_a:
+                mock_a.set_role_response(role, resp)
+            if mock_b:
+                mock_b.set_role_response(role, resp)
 
         results = await council.execute()
         # Planner should have called mock_b
         planner_calls = [c for c in mock_b.call_history if c.get("role") == "planner"]
         # Verify fallback happened: mock_b was used
         assert len(planner_calls) > 0 or (
-            results.get("planner") and any("error" not in r for r in results.get("planner", []))
+            results.get("planner")
+            and any("error" not in r for r in results.get("planner", []))
         ), "Fallback should have occurred"
 
     @pytest.mark.asyncio
@@ -715,7 +1059,9 @@ class TestFallbackBehavior:
 
         results = await council.execute()
         planner_results = results.get("planner", [])
-        assert any("error" in r for r in planner_results), "Fallback exhaustion should report error"
+        assert any("error" in r for r in planner_results), (
+            "Fallback exhaustion should report error"
+        )
 
     @pytest.mark.asyncio
     async def test_fallback_not_triggered_when_healthy(self, config_dir, event_log):
@@ -726,12 +1072,15 @@ class TestFallbackBehavior:
 
         mock_a = registry.get("mock_a")
         for role, resp in MOCK_SUCCESS_RESPONSES.items():
-            if mock_a: mock_a.set_role_response(role, resp)
+            if mock_a:
+                mock_a.set_role_response(role, resp)
 
         results = await council.execute()
         planner_results = results.get("planner", [])
         assert len(planner_results) > 0
-        assert "error" not in planner_results[0], "Healthy provider should not trigger fallback"
+        assert "error" not in planner_results[0], (
+            "Healthy provider should not trigger fallback"
+        )
 
 
 class TestTimeoutAndRetry:
@@ -750,15 +1099,24 @@ class TestTimeoutAndRetry:
         # Make all providers slow
         mock_prov.set_delay(5.0)
         mock_prov.set_role_failure("planner", "timeout")
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         start = time.monotonic()
-        results = await council.execute()
+        await council.execute()
         elapsed = time.monotonic() - start
         # If timeout were enforced per role, total time would be bounded
         # Without timeout, it would take 5+ seconds per role
-        assert elapsed < 60, f"Execution took {elapsed}s — possibly no timeout enforcement"
+        assert elapsed < 60, (
+            f"Execution took {elapsed}s — possibly no timeout enforcement"
+        )
 
     @pytest.mark.asyncio
     async def test_retry_policy_bounded(self, config_dir, event_log):
@@ -769,7 +1127,14 @@ class TestTimeoutAndRetry:
         mock_prov = registry.get("mock")
         # Planner always fails
         mock_prov.set_role_failure("planner", "http_500")
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         start = time.monotonic()
@@ -782,8 +1147,12 @@ class TestTimeoutAndRetry:
         assert len(planner_results) > 0, "Planner should have a result"
 
         # Count how many times planner call was made on the mock
-        planner_calls = [c for c in mock_prov.call_history if c.get("role") == "planner"]
-        assert len(planner_calls) <= 4, f"Too many retries: {len(planner_calls)} (expected ≤ 3 retries + 1 initial)"
+        planner_calls = [
+            c for c in mock_prov.call_history if c.get("role") == "planner"
+        ]
+        assert len(planner_calls) <= 4, (
+            f"Too many retries: {len(planner_calls)} (expected ≤ 3 retries + 1 initial)"
+        )
 
     @pytest.mark.asyncio
     async def test_no_infinite_wait(self, config_dir, event_log):
@@ -799,12 +1168,19 @@ class TestTimeoutAndRetry:
         # not hang.  A small delay suffices — no need for 999s.
         mock_prov.set_delay(2)
         mock_prov.set_role_failure("planner", "timeout")
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         start = time.monotonic()
         try:
-            results = await asyncio.wait_for(council.execute(), timeout=5)
+            await asyncio.wait_for(council.execute(), timeout=5)
             elapsed = time.monotonic() - start
             assert elapsed < 4, f"No infinite wait: completed in {elapsed}s"
         except asyncio.TimeoutError:
@@ -817,11 +1193,21 @@ class TestTimeoutAndRetry:
         registry = _create_registry(config_dir, event_log)
         council = _create_council(registry)
         mock_prov = registry.get("mock")
-        for role_name in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for role_name in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_failure(role_name, "http_500")
         try:
             results = await asyncio.wait_for(council.execute(), timeout=15)
-            assert results is not None, "Council should return results (even if all errors)"
+            assert results is not None, (
+                "Council should return results (even if all errors)"
+            )
         except asyncio.TimeoutError:
             pytest.fail("Council.execute() timed out — frozen")
 
@@ -853,20 +1239,28 @@ class TestFusionWithFailures:
         """Fusion continues with partial council results."""
         syn = Synthesizer()
         results = {
-            "planner": [{"role": "planner", "parsed": MOCK_SUCCESS_RESPONSES["planner"]}],
-            "implementer": [{"role": "implementer", "parsed": MOCK_SUCCESS_RESPONSES["implementer"]}],
+            "planner": [
+                {"role": "planner", "parsed": MOCK_SUCCESS_RESPONSES["planner"]}
+            ],
+            "implementer": [
+                {"role": "implementer", "parsed": MOCK_SUCCESS_RESPONSES["implementer"]}
+            ],
             # reviewer failed
             "reviewer": [{"error": "provider failed: HTTP 429"}],
         }
         fused = syn.fuse(results)
         assert len(fused.get("errors", [])) == 1, "Only reviewer error"
-        assert fused.get("changes_proposed") == 1, "Should still propose changes from implementer"
+        assert fused.get("changes_proposed") == 1, (
+            "Should still propose changes from implementer"
+        )
         sources = set(f.get("source", "") for f in fused.get("findings", []))
         assert "planner" in sources, "Planner findings should appear"
         assert "implementer" in sources, "Implementer findings should appear"
 
     @pytest.mark.asyncio
-    async def test_completion_confidence_reduced_on_degraded(self, config_dir, event_log):
+    async def test_completion_confidence_reduced_on_degraded(
+        self, config_dir, event_log
+    ):
         """Confidence is reduced when council is degraded."""
         _setup_single_mock_config(config_dir)
         registry = _create_registry(config_dir, event_log)
@@ -874,14 +1268,23 @@ class TestFusionWithFailures:
         mock_prov = registry.get("mock")
         # Reviewer fails — degradation
         mock_prov.set_role_failure("reviewer", "http_500")
-        for r in ["planner", "scout", "implementer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "planner",
+            "scout",
+            "implementer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
         syn = Synthesizer()
         fused = syn.fuse(results)
         # Fused should contain errors
-        assert len(fused.get("errors", [])) > 0, "Errors should be present in fusion output"
+        assert len(fused.get("errors", [])) > 0, (
+            "Errors should be present in fusion output"
+        )
 
     @pytest.mark.asyncio
     async def test_fusion_marks_missing_perspectives(self, config_dir, event_log):
@@ -892,7 +1295,14 @@ class TestFusionWithFailures:
         mock_prov = registry.get("mock")
         # Skeptic fails
         mock_prov.set_role_failure("skeptic", "http_500")
-        for r in ["planner", "scout", "implementer", "reviewer", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
@@ -900,7 +1310,9 @@ class TestFusionWithFailures:
         fused = syn.fuse(results)
         # Should mention skeptic failure in errors
         skeptic_errors = [e for e in fused.get("errors", []) if "skeptic" in e]
-        assert len(skeptic_errors) > 0, "Skeptic failure should be noted in fusion errors"
+        assert len(skeptic_errors) > 0, (
+            "Skeptic failure should be noted in fusion errors"
+        )
 
 
 class TestEventLoggingForFailures:
@@ -920,8 +1332,15 @@ class TestEventLoggingForFailures:
 
         await council.execute()
         events = event_log.replay()
-        provider_failures = [e for e in events if e.get("event") == "provider_failed" or e.get("event") == "provider_role_failure_simulated"]
-        assert len(provider_failures) >= 2, "Event log should contain provider failure events"
+        provider_failures = [
+            e
+            for e in events
+            if e.get("event") == "provider_failed"
+            or e.get("event") == "provider_role_failure_simulated"
+        ]
+        assert len(provider_failures) >= 2, (
+            "Event log should contain provider failure events"
+        )
 
     @pytest.mark.asyncio
     async def test_event_log_contains_role_and_model_info(self, config_dir, event_log):
@@ -934,10 +1353,17 @@ class TestEventLoggingForFailures:
         council = _create_council(registry, config)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "http_500")
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
-        results = await council.execute()
+        await council.execute()
         events = event_log.replay()
         role_failures = [e for e in events if e.get("event") == "role_execution_failed"]
         assert role_failures, "Event log should contain role execution failure events"
@@ -966,10 +1392,14 @@ class TestEdgeCases:
         """Schema validation errors are captured."""
         syn = Synthesizer()
         results = {
-            "planner": [{"role": "planner", "parsed": {"steps": ["do x"]}}],  # missing completion_criteria
+            "planner": [
+                {"role": "planner", "parsed": {"steps": ["do x"]}}
+            ],  # missing completion_criteria
         }
         fused = syn.fuse(results)
-        assert len(fused.get("schema_errors", [])) > 0, "Missing required field should be reported"
+        assert len(fused.get("schema_errors", [])) > 0, (
+            "Missing required field should be reported"
+        )
 
     @pytest.mark.asyncio
     async def test_council_with_empty_goal(self, config_dir, event_log):
@@ -1004,30 +1434,44 @@ class TestEdgeCases:
         council = _create_council(registry)
         mock_prov = registry.get("mock")
         mock_prov.set_role_failure("planner", "http_500")
-        for r in ["scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+        for r in [
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         await council.execute()
         # Provider should still be healthy for other roles... Actually mark_unhealthy is called on each failure
         # but the mock provider's internal healthy flag is separate
         mock_prov._healthy = False  # Simulate registry marking unhealthy
-        assert not mock_prov.ishealthy() if hasattr(mock_prov, 'ishealthy') else not mock_prov._healthy, \
-            "Provider should be marked unhealthy after failure"
+        assert (
+            not mock_prov.ishealthy()
+            if hasattr(mock_prov, "ishealthy")
+            else not mock_prov._healthy
+        ), "Provider should be marked unhealthy after failure"
 
 
 # =============================================================================
 # Policy enforcement tests
 # =============================================================================
 
+
 class TestPolicyEnforcement:
     """Verify config policies are enforced."""
 
     def test_config_requires_timeout_seconds(self):
         """Provider config should define timeout_seconds."""
-        config = {"base_url": "http://test", "auth": {"type": "none"}}
         # In current code, timeout_seconds defaults to 90 in OpenAICompatibleProvider
         # Let's verify it's configurable
-        config_with_timeout = {"base_url": "http://test", "auth": {"type": "none"}, "timeout_seconds": 30}
+        config_with_timeout = {
+            "base_url": "http://test",
+            "auth": {"type": "none"},
+            "timeout_seconds": 30,
+        }
         assert "timeout_seconds" in config_with_timeout
 
     def test_config_retry_policy(self):
@@ -1051,7 +1495,9 @@ class TestPolicyEnforcement:
         }
         for role_name, role_config in council["roles"].items():
             assert "criticality" in role_config, f"{role_name} missing criticality"
-            assert role_config.get("fallback_chain"), f"{role_name} missing fallback chain"
+            assert role_config.get("fallback_chain"), (
+                f"{role_name} missing fallback chain"
+            )
 
     @pytest.mark.asyncio
     async def test_degraded_mode_policy(self, config_dir):
@@ -1059,8 +1505,12 @@ class TestPolicyEnforcement:
         # Simulate fusion with degraded council
         syn = Synthesizer()
         results = {
-            "planner": [{"role": "planner", "parsed": MOCK_SUCCESS_RESPONSES["planner"]}],
-            "implementer": [{"role": "implementer", "parsed": MOCK_SUCCESS_RESPONSES["implementer"]}],
+            "planner": [
+                {"role": "planner", "parsed": MOCK_SUCCESS_RESPONSES["planner"]}
+            ],
+            "implementer": [
+                {"role": "implementer", "parsed": MOCK_SUCCESS_RESPONSES["implementer"]}
+            ],
             "reviewer": [{"error": "provider failed: all providers unhealthy"}],
             "skeptic": [{"error": "provider failed: all providers unhealthy"}],
         }
@@ -1077,6 +1527,7 @@ class TestPolicyEnforcement:
 # End-to-end synthesis with degraded council — event log verification
 # =============================================================================
 
+
 class TestEndToEndDegradedCouncil:
     """Full e2e test simulating a production failure scenario."""
 
@@ -1090,16 +1541,58 @@ class TestEndToEndDegradedCouncil:
         # Multi-provider setup so fallback works
         providers_json = {
             "providers": {
-                "mock_p": {"enabled": True, "type": "mock", "base_url": "http://mock-p", "auth": {"type": "none"}, "timeout_seconds": 10},
-                "mock_f": {"enabled": True, "type": "mock", "base_url": "http://mock-f", "auth": {"type": "none"}, "timeout_seconds": 10},
+                "mock_p": {
+                    "enabled": True,
+                    "type": "mock",
+                    "base_url": "http://mock-p",
+                    "auth": {"type": "none"},
+                    "timeout_seconds": 10,
+                },
+                "mock_f": {
+                    "enabled": True,
+                    "type": "mock",
+                    "base_url": "http://mock-f",
+                    "auth": {"type": "none"},
+                    "timeout_seconds": 10,
+                },
             }
         }
         (config_dir / "providers.json").write_text(json.dumps(providers_json))
 
         models_json = {
             "models": {
-                "mock_p:all": {"provider": "mock_p", "model": "mock-p-v1", "enabled": True, "context_window": 32000, "strengths": ["planning", "implementation", "review", "synthesis"], "roles": ["planner", "implementer", "reviewer", "synthesizer", "scout", "skeptic", "cheap_verifier"]},
-                "mock_f:all": {"provider": "mock_f", "model": "mock-f-v1", "enabled": True, "context_window": 32000, "strengths": ["planning", "implementation", "review", "synthesis"], "roles": ["planner", "implementer", "reviewer", "synthesizer", "scout", "skeptic", "cheap_verifier"]},
+                "mock_p:all": {
+                    "provider": "mock_p",
+                    "model": "mock-p-v1",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["planning", "implementation", "review", "synthesis"],
+                    "roles": [
+                        "planner",
+                        "implementer",
+                        "reviewer",
+                        "synthesizer",
+                        "scout",
+                        "skeptic",
+                        "cheap_verifier",
+                    ],
+                },
+                "mock_f:all": {
+                    "provider": "mock_f",
+                    "model": "mock-f-v1",
+                    "enabled": True,
+                    "context_window": 32000,
+                    "strengths": ["planning", "implementation", "review", "synthesis"],
+                    "roles": [
+                        "planner",
+                        "implementer",
+                        "reviewer",
+                        "synthesizer",
+                        "scout",
+                        "skeptic",
+                        "cheap_verifier",
+                    ],
+                },
             }
         }
         (config_dir / "models.json").write_text(json.dumps(models_json))
@@ -1110,7 +1603,7 @@ class TestEndToEndDegradedCouncil:
         # Replace MockProviders with MockFailureProviders
         for pid in list(registry._providers.keys()):
             prov = registry._providers[pid]
-            if prov.__class__.__name__ == 'MockProvider':
+            if prov.__class__.__name__ == "MockProvider":
                 new_prov = MockFailureProvider(pid, prov.config, event_log)
                 registry._providers[pid] = new_prov
 
@@ -1121,8 +1614,10 @@ class TestEndToEndDegradedCouncil:
         mock_p.set_role_failure("reviewer", "http_500")
         # All other roles succeed
         for role, resp in MOCK_SUCCESS_RESPONSES.items():
-            if mock_p: mock_p.set_role_response(role, resp)
-            if mock_f: mock_f.set_role_response(role, resp)
+            if mock_p:
+                mock_p.set_role_response(role, resp)
+            if mock_f:
+                mock_f.set_role_response(role, resp)
 
         config = _make_minimal_fusion_config()
         council = Council(registry, config, GOAL, event_log=event_log)
@@ -1136,33 +1631,51 @@ class TestEndToEndDegradedCouncil:
         evts = event_log.replay()
         print("\n=== ALL EVENTS ===")
         for e in evts:
-            print(f"  {e.get('event', '?'):35s} | role={e.get('role', '?'):15s} | provider={e.get('provider_id', '?'):10s} | error={e.get('error', '')[:50]}")
+            print(
+                f"  {e.get('event', '?'):35s} | role={e.get('role', '?'):15s} | provider={e.get('provider_id', '?'):10s} | error={e.get('error', '')[:50]}"
+            )
         print("=== END EVENTS ===")
-        assert any(e.get("event") == "role_execution_failed" for e in evts), "Should have role_execution_failed events"
-        assert any(e.get("event") == "role_fallback" for e in evts), "Should have role_fallback events"
+        assert any(e.get("event") == "role_execution_failed" for e in evts), (
+            "Should have role_execution_failed events"
+        )
+        assert any(e.get("event") == "role_fallback" for e in evts), (
+            "Should have role_fallback events"
+        )
 
         # Verify roles_executed_failed events include role, provider, error
         fail_events = [e for e in evts if e.get("event") == "role_execution_failed"]
         if fail_events:
             assert all("role" in e for e in fail_events), "Fail events should have role"
-            assert all("provider_id" in e for e in fail_events), "Fail events should have provider_id"
-            assert all("error" in e for e in fail_events), "Fail events should have error"
+            assert all("provider_id" in e for e in fail_events), (
+                "Fail events should have provider_id"
+            )
+            assert all("error" in e for e in fail_events), (
+                "Fail events should have error"
+            )
 
         # Fallback events should have from_provider and to_provider
         fallback_events = [e for e in evts if e.get("event") == "role_fallback"]
         if fallback_events:
-            assert all("from_provider" in e for e in fallback_events), "Fallback events need from_provider"
-            assert all("to_provider" in e for e in fallback_events), "Fallback events need to_provider"
+            assert all("from_provider" in e for e in fallback_events), (
+                "Fallback events need from_provider"
+            )
+            assert all("to_provider" in e for e in fallback_events), (
+                "Fallback events need to_provider"
+            )
 
         # Other roles should have succeeded
         assert "error" not in results.get("planner", [{}])[0], "Planner should succeed"
-        assert "error" not in results.get("implementer", [{}])[0], "Implementer should succeed"
+        assert "error" not in results.get("implementer", [{}])[0], (
+            "Implementer should succeed"
+        )
         assert "error" not in results.get("scout", [{}])[0], "Scout should succeed"
 
         # Degraded roles: reviewer failed once before fallback
         degraded = council.get_degraded_roles()
         assert len(degraded) >= 1, "Should track degraded roles"
-        assert "reviewer" in degraded, "Reviewer should be degraded after initial failure"
+        assert "reviewer" in degraded, (
+            "Reviewer should be degraded after initial failure"
+        )
 
         # Print terminal log evidence
         print("\n=== TERMINAL LOG EVIDENCE ===")
@@ -1174,5 +1687,7 @@ class TestEndToEndDegradedCouncil:
         print(f"Fusion summary: {fused.get('summary', '')}")
         print("\n=== EVENT LOG ===")
         for e in evts[-10:]:  # last 10 events
-            print(f"  {e.get('time', '?')[:26]} | {e.get('event', '?'):30s} | {e.get('role', e.get('provider_id', ''))}")
+            print(
+                f"  {e.get('time', '?')[:26]} | {e.get('event', '?'):30s} | {e.get('role', e.get('provider_id', ''))}"
+            )
         print("=== END LOG ===")

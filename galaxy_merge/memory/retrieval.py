@@ -31,9 +31,14 @@ class MemoryRetriever:
             pinned = []
             if index_path.exists():
                 import json
+
                 try:
                     index = json.loads(index_path.read_text())
-                    pinned = [n["path"].replace(".md", "") for n in index.get("notes", []) if n.get("pinned")]
+                    pinned = [
+                        n["path"].replace(".md", "")
+                        for n in index.get("notes", [])
+                        if n.get("pinned")
+                    ]
                 except Exception:
                     pass
             for f in sorted(notes_dir.iterdir()):

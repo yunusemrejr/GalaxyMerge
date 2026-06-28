@@ -17,22 +17,19 @@ Covers:
 - Ctrl+C shuts down cleanly
 """
 
-import pytest
-
-pytestmark = [pytest.mark.integration]
-
-
 import json
 import os
-import re
 import subprocess
-import sys
 from pathlib import Path
 from unittest.mock import patch
 
 import pytest
 
-from galaxy_merge.app.launcher import Launcher, _detect_install_dir, _is_inside_galaxy_merge_codebase
+from galaxy_merge.app.launcher import (
+    Launcher,
+    _detect_install_dir,
+    _is_inside_galaxy_merge_codebase,
+)
 from galaxy_merge.app.lifecycle import run_doctor, PROVIDER_ENV_VARS
 from galaxy_merge.core.session import detect_workroot, init_gm_dir, Session
 from galaxy_merge.safety.self_protection import SelfProtectionPolicy
@@ -40,6 +37,8 @@ from galaxy_merge.safety.governor import SafetyGovernor
 from galaxy_merge.safety.audit import SafetyAudit
 from galaxy_merge.safety.credential_policy import CredentialPolicy
 from galaxy_merge.app.server import SessionServer
+
+pytestmark = [pytest.mark.integration]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -49,11 +48,14 @@ REPO_ROOT = Path(__file__).resolve().parents[2]
 # Launcher path resolution
 # =============================================================================
 
+
 class TestLauncherPathResolution:
     def test_detect_install_dir_finds_repo_root(self):
         install_dir = _detect_install_dir()
         assert install_dir is not None
-        assert (install_dir / "pyproject.toml").exists() or (install_dir / "gm").exists()
+        assert (install_dir / "pyproject.toml").exists() or (
+            install_dir / "gm"
+        ).exists()
 
     def test_is_inside_galaxy_merge_codebase_true_for_repo_root(self):
         assert _is_inside_galaxy_merge_codebase(REPO_ROOT) is True
@@ -75,11 +77,14 @@ class TestLauncherPathResolution:
 # Launcher project directory capture
 # =============================================================================
 
+
 class TestLauncherProjectCapture:
     def test_launcher_uses_project_dir_when_provided(self, tmp_path):
         (tmp_path / ".git").mkdir()
         launcher = Launcher(project_dir=str(tmp_path), no_browser=True)
-        cwd = Path(launcher.project_dir).resolve() if launcher.project_dir else Path.cwd()
+        cwd = (
+            Path(launcher.project_dir).resolve() if launcher.project_dir else Path.cwd()
+        )
         assert cwd == tmp_path.resolve()
 
     def test_launcher_uses_cwd_when_no_project_dir(self, tmp_path):
@@ -93,6 +98,7 @@ class TestLauncherProjectCapture:
 # =============================================================================
 # Self-codebase protection
 # =============================================================================
+
 
 class TestSelfCodebaseProtection:
     def test_readonly_mode_detected_for_repo_root(self):
@@ -161,6 +167,7 @@ class TestSelfCodebaseProtection:
 # .gm/ creation
 # =============================================================================
 
+
 class TestGmDirCreation:
     def test_running_gm_creates_gm_dir(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -175,9 +182,18 @@ class TestGmDirCreation:
         init_gm_dir(tmp_path)
         gm = tmp_path / ".gm"
         required = [
-            "notes", "memory", "sessions", "indexes",
-            "cache", "web", "browser", "locations",
-            "github", "logs", "safety", "git",
+            "notes",
+            "memory",
+            "sessions",
+            "indexes",
+            "cache",
+            "web",
+            "browser",
+            "locations",
+            "github",
+            "logs",
+            "safety",
+            "git",
         ]
         for d in required:
             assert (gm / d).is_dir(), f".gm/{d}/ missing"
@@ -186,6 +202,7 @@ class TestGmDirCreation:
 # =============================================================================
 # Backend startup
 # =============================================================================
+
 
 class TestBackendStartup:
     def test_session_server_creates(self, tmp_path):
@@ -212,6 +229,7 @@ class TestBackendStartup:
         session = Session(tmp_path)
         session.save_state()
         from galaxy_merge.app.server import start_server
+
         info = start_server(session, port=0)
         assert "url" in info
         assert "port" in info
@@ -222,6 +240,7 @@ class TestBackendStartup:
 # =============================================================================
 # GUI URL behavior
 # =============================================================================
+
 
 class TestGuiUrl:
     def test_url_format(self, tmp_path):
@@ -237,6 +256,7 @@ class TestGuiUrl:
 # =============================================================================
 # Provider key handling
 # =============================================================================
+
 
 class TestProviderKeyHandling:
     def test_missing_keys_do_not_crash_session(self, tmp_path):
@@ -261,6 +281,7 @@ class TestProviderKeyHandling:
 # =============================================================================
 # Secret redaction
 # =============================================================================
+
 
 class TestSecretRedaction:
     def test_api_key_redacted(self):
@@ -298,6 +319,7 @@ class TestSecretRedaction:
 # Gitignore compliance
 # =============================================================================
 
+
 class TestGitignoreCompliance:
     def test_gm_ignored(self):
         gitignore = REPO_ROOT / ".gitignore"
@@ -322,11 +344,20 @@ class TestGitignoreCompliance:
     def test_no_secrets_in_tracked_files(self):
         result = subprocess.run(
             ["git", "ls-files", "--cached"],
-            cwd=REPO_ROOT, capture_output=True, text=True, check=False,
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
         )
         assert result.returncode == 0
         tracked = result.stdout.splitlines()
-        forbidden = {".env", "providers.json", "models.json", "routing.json", "fusion.json"}
+        forbidden = {
+            ".env",
+            "providers.json",
+            "models.json",
+            "routing.json",
+            "fusion.json",
+        }
         for f in tracked:
             basename = Path(f).name
             if basename in forbidden and "example" not in basename:
@@ -337,6 +368,7 @@ class TestGitignoreCompliance:
 # =============================================================================
 # Doctor diagnostics
 # =============================================================================
+
 
 class TestDoctor:
     def test_doctor_returns_int(self):
@@ -376,12 +408,14 @@ class TestDoctor:
 # Ctrl+C shutdown
 # =============================================================================
 
+
 class TestShutdown:
     def test_session_marks_completed_on_shutdown(self, tmp_path):
         init_gm_dir(tmp_path)
         session = Session(tmp_path)
         session.save_state()
         from galaxy_merge.app.lifecycle import shutdown
+
         shutdown(session)
         state = json.loads(session.state_path.read_text())
         assert state["status"] == "complete"
@@ -389,16 +423,17 @@ class TestShutdown:
 
     def test_launcher_has_signal_handlers(self, tmp_path):
         launcher = Launcher(project_dir=str(tmp_path))
-        assert hasattr(launcher, '_setup_signal_handlers')
+        assert hasattr(launcher, "_setup_signal_handlers")
 
     def test_launcher_has_shutdown(self, tmp_path):
         launcher = Launcher(project_dir=str(tmp_path))
-        assert hasattr(launcher, '_shutdown')
+        assert hasattr(launcher, "_shutdown")
 
 
 # =============================================================================
 # Smoke test project creation
 # =============================================================================
+
 
 class TestSmokeTestProject:
     def test_smoke_project_setup(self, tmp_path):

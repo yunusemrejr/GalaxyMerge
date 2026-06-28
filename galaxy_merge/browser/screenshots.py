@@ -36,7 +36,11 @@ class ScreenshotManager:
                 timeout=15,
             )
             if result.returncode == 0:
-                return {"success": True, "screenshot_path": str(path), "source": "desktop"}
+                return {
+                    "success": True,
+                    "screenshot_path": str(path),
+                    "source": "desktop",
+                }
         gnome_path = shutil.which("gnome-screenshot")
         if gnome_path:
             result = subprocess.run(
@@ -46,5 +50,12 @@ class ScreenshotManager:
                 timeout=15,
             )
             if result.returncode == 0:
-                return {"success": True, "screenshot_path": str(path), "source": "desktop"}
-        return {"success": False, "error": "no screenshot tool available (try: import, gnome-screenshot, or CDP)"}
+                return {
+                    "success": True,
+                    "screenshot_path": str(path),
+                    "source": "desktop",
+                }
+        return {
+            "success": False,
+            "error": "no screenshot tool available (try: import, gnome-screenshot, or CDP)",
+        }

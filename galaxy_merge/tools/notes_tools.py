@@ -22,12 +22,16 @@ def _get_index(notes_dir: Path) -> dict[str, Any]:
     return {"schema_version": 1, "notes": []}
 
 
-def _save_index(notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False) -> None:
+def _save_index(
+    notes_dir: Path, index: dict[str, Any], *, _nested_lock: bool = False
+) -> None:
     index_path = notes_dir / "index.json"
     atomic_write(index_path, json.dumps(index, indent=2), _nested_lock=_nested_lock)
 
 
-def _save_note_version(notes_dir: Path, note_id: str, content: str, *, _nested_lock: bool = False) -> str:
+def _save_note_version(
+    notes_dir: Path, note_id: str, content: str, *, _nested_lock: bool = False
+) -> str:
     history_dir = notes_dir / "history"
     history_dir.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S_%f")
@@ -61,7 +65,9 @@ def clear_goal_injections(gm_dir: Path | None = None) -> None:
 def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
     notes_dir = _get_notes_dir(gm_dir)
 
-    async def notes_create(name: str, content: str = "", title: str | None = None) -> ToolResult:
+    async def notes_create(
+        name: str, content: str = "", title: str | None = None
+    ) -> ToolResult:
         notes_dir.mkdir(parents=True, exist_ok=True)
         path = notes_dir / f"{name}.md"
         with _notes_lock(notes_dir):
@@ -71,24 +77,30 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
 
             index = _get_index(notes_dir)
             note_id = f"note_{name}"
-            index.setdefault("notes", []).append({
-                "id": note_id,
-                "path": f"{name}.md",
-                "title": title or name,
-                "tags": [],
-                "pinned": False,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
+            index.setdefault("notes", []).append(
+                {
+                    "id": note_id,
+                    "path": f"{name}.md",
+                    "title": title or name,
+                    "tags": [],
+                    "pinned": False,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             _save_index(notes_dir, index, _nested_lock=True)
-        return ToolResult(success=True, data={"note_id": note_id, "name": name, "created": True})
+        return ToolResult(
+            success=True, data={"note_id": note_id, "name": name, "created": True}
+        )
 
     async def notes_read(name: str | None = None) -> ToolResult:
         if name:
             path = notes_dir / f"{name}.md"
             if not path.exists():
                 return ToolResult(success=False, error=f"note '{name}' not found")
-            return ToolResult(success=True, data={"name": name, "content": path.read_text()})
+            return ToolResult(
+                success=True, data={"name": name, "content": path.read_text()}
+            )
 
         notes = {}
         if notes_dir.exists():
@@ -122,7 +134,9 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
             if not old_path.exists():
                 return ToolResult(success=False, error=f"note '{name}' not found")
             if new_path.exists():
-                return ToolResult(success=False, error=f"note '{new_name}' already exists")
+                return ToolResult(
+                    success=False, error=f"note '{new_name}' already exists"
+                )
             old_path.rename(new_path)
 
             index = _get_index(notes_dir)
@@ -132,7 +146,9 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                     entry["id"] = f"note_{new_name}"
                     entry["updated_at"] = datetime.now(timezone.utc).isoformat()
             _save_index(notes_dir, index, _nested_lock=True)
-        return ToolResult(success=True, data={"from": name, "to": new_name, "renamed": True})
+        return ToolResult(
+            success=True, data={"from": name, "to": new_name, "renamed": True}
+        )
 
     async def notes_delete(name: str) -> ToolResult:
         path = notes_dir / f"{name}.md"
@@ -147,33 +163,45 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
 
             index = _get_index(notes_dir)
             target_path = f"{name}.md"
-            index["notes"] = [n for n in index.get("notes", []) if n.get("path") != target_path]
+            index["notes"] = [
+                n for n in index.get("notes", []) if n.get("path") != target_path
+            ]
             _save_index(notes_dir, index, _nested_lock=True)
-        return ToolResult(success=True, data={"name": name, "deleted": True, "trashed": True})
+        return ToolResult(
+            success=True, data={"name": name, "deleted": True, "trashed": True}
+        )
 
     async def notes_restore(name: str) -> ToolResult:
         trash_dir = notes_dir / ".trash"
         trashed = trash_dir / f"{name}.md"
         with _notes_lock(notes_dir):
             if not trashed.exists():
-                return ToolResult(success=False, error=f"no trashed note '{name}' found")
+                return ToolResult(
+                    success=False, error=f"no trashed note '{name}' found"
+                )
             target = notes_dir / f"{name}.md"
 
             index = _get_index(notes_dir)
-            existing = [n for n in index.get("notes", []) if n.get("path") == f"{name}.md"]
+            existing = [
+                n for n in index.get("notes", []) if n.get("path") == f"{name}.md"
+            ]
             if existing:
-                return ToolResult(success=False, error=f"note '{name}' already exists in active notes")
+                return ToolResult(
+                    success=False, error=f"note '{name}' already exists in active notes"
+                )
 
             trashed.rename(target)
-            index.setdefault("notes", []).append({
-                "id": f"note_{name}",
-                "path": f"{name}.md",
-                "title": name,
-                "tags": [],
-                "pinned": False,
-                "created_at": datetime.now(timezone.utc).isoformat(),
-                "updated_at": datetime.now(timezone.utc).isoformat(),
-            })
+            index.setdefault("notes", []).append(
+                {
+                    "id": f"note_{name}",
+                    "path": f"{name}.md",
+                    "title": name,
+                    "tags": [],
+                    "pinned": False,
+                    "created_at": datetime.now(timezone.utc).isoformat(),
+                    "updated_at": datetime.now(timezone.utc).isoformat(),
+                }
+            )
             _save_index(notes_dir, index, _nested_lock=True)
         return ToolResult(success=True, data={"name": name, "restored": True})
 
@@ -221,7 +249,10 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
         path = history_dir / version
         if not path.exists():
             return ToolResult(success=False, error=f"version '{version}' not found")
-        return ToolResult(success=True, data={"name": name, "version": version, "content": path.read_text()})
+        return ToolResult(
+            success=True,
+            data={"name": name, "version": version, "content": path.read_text()},
+        )
 
     async def notes_search(query: str, scope: str = "all") -> ToolResult:
         """Search notes by keyword in content, title, or tags."""
@@ -245,16 +276,23 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
 
             if matched:
                 idx = _get_index(notes_dir)
-                meta = next((n for n in idx.get("notes", []) if n.get("path") == f.name), {})
-                results.append({
-                    "name": f.stem,
-                    "title": meta.get("title", f.stem),
-                    "tags": meta.get("tags", []),
-                    "pinned": meta.get("pinned", False),
-                    "preview": content[:200],
-                    "match_type": match_type,
-                })
-        return ToolResult(success=True, data={"query": query, "results": results, "count": len(results)})
+                meta = next(
+                    (n for n in idx.get("notes", []) if n.get("path") == f.name), {}
+                )
+                results.append(
+                    {
+                        "name": f.stem,
+                        "title": meta.get("title", f.stem),
+                        "tags": meta.get("tags", []),
+                        "pinned": meta.get("pinned", False),
+                        "preview": content[:200],
+                        "match_type": match_type,
+                    }
+                )
+        return ToolResult(
+            success=True,
+            data={"query": query, "results": results, "count": len(results)},
+        )
 
     async def notes_inject(name: str) -> ToolResult:
         """Inject a selected note into the current goal context."""
@@ -263,9 +301,14 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
             return ToolResult(success=False, error=f"note '{name}' not found")
         content = path.read_text()
         _injected_by_gm_dir.setdefault(str(notes_dir.parent), []).append(name)
-        return ToolResult(success=True, data={"name": name, "injected": True, "content": content[:500]})
+        return ToolResult(
+            success=True,
+            data={"name": name, "injected": True, "content": content[:500]},
+        )
 
-    async def notes_write(name: str, content: str, title: str | None = None) -> ToolResult:
+    async def notes_write(
+        name: str, content: str, title: str | None = None
+    ) -> ToolResult:
         notes_dir.mkdir(parents=True, exist_ok=True)
         path = notes_dir / f"{name}.md"
         with _notes_lock(notes_dir):
@@ -277,7 +320,9 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
             index = _get_index(notes_dir)
             note_id = f"note_{name}"
             target_path = f"{name}.md"
-            existing = [n for n in index.get("notes", []) if n.get("path") == target_path]
+            existing = [
+                n for n in index.get("notes", []) if n.get("path") == target_path
+            ]
 
             if existing:
                 entry = existing[0]
@@ -285,67 +330,181 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
                 if title:
                     entry["title"] = title
             else:
-                index.setdefault("notes", []).append({
-                    "id": note_id,
-                    "path": target_path,
-                    "title": title or name,
-                    "tags": [],
-                    "pinned": False,
-                    "created_at": datetime.now(timezone.utc).isoformat(),
-                    "updated_at": datetime.now(timezone.utc).isoformat(),
-                })
+                index.setdefault("notes", []).append(
+                    {
+                        "id": note_id,
+                        "path": target_path,
+                        "title": title or name,
+                        "tags": [],
+                        "pinned": False,
+                        "created_at": datetime.now(timezone.utc).isoformat(),
+                        "updated_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                )
             _save_index(notes_dir, index, _nested_lock=True)
-        return ToolResult(success=True, data={"name": name, "written": True, "created": not existed})
+        return ToolResult(
+            success=True, data={"name": name, "written": True, "created": not existed}
+        )
 
     return [
-        (ToolSchema("notes.create", "Create a new project note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "content": {"type": "string", "default": ""},
-            "title": {"type": "string", "default": None},
-        }), notes_create),
-        (ToolSchema("notes.write", "Write a note (create or overwrite with history)", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "content": {"type": "string", "required": True},
-            "title": {"type": "string", "default": None},
-        }), notes_write),
-        (ToolSchema("notes.read", "Read project note(s)", parameters={
-            "name": {"type": "string", "default": None},
-        }), notes_read),
-        (ToolSchema("notes.update", "Update a project note (saves history)", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "content": {"type": "string", "required": True},
-        }), notes_update),
-        (ToolSchema("notes.rename", "Rename a project note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "new_name": {"type": "string", "required": True},
-        }), notes_rename),
-        (ToolSchema("notes.delete", "Soft-delete a project note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-        }), notes_delete),
-        (ToolSchema("notes.restore", "Restore a soft-deleted note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-        }), notes_restore),
-        (ToolSchema("notes.tag", "Tag a project note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "tags": {"type": "array", "items": {"type": "string"}, "required": True},
-        }), notes_tag),
-        (ToolSchema("notes.pin", "Pin or unpin a project note", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-            "pinned": {"type": "boolean", "default": True},
-        }), notes_pin),
-        (ToolSchema("notes.list", "List notes with index metadata (tags, pinned, timestamps)"), notes_list_indexed),
-        (ToolSchema("notes.history.list", "List available versions of a note", parameters={
-            "name": {"type": "string", "required": True},
-        }), notes_history_list),
-        (ToolSchema("notes.history.read", "Read a specific version of a note from history", parameters={
-            "name": {"type": "string", "required": True},
-            "version": {"type": "string", "required": True},
-        }), notes_history_read),
-        (ToolSchema("notes.search", "Search notes by keyword in content, title, or tags", parameters={
-            "query": {"type": "string", "required": True},
-            "scope": {"type": "string", "default": "all"},
-        }), notes_search),
-        (ToolSchema("notes.inject", "Inject a note into the current goal context", mutates=True, parameters={
-            "name": {"type": "string", "required": True},
-        }), notes_inject),
+        (
+            ToolSchema(
+                "notes.create",
+                "Create a new project note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "content": {"type": "string", "default": ""},
+                    "title": {"type": "string", "default": None},
+                },
+            ),
+            notes_create,
+        ),
+        (
+            ToolSchema(
+                "notes.write",
+                "Write a note (create or overwrite with history)",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "content": {"type": "string", "required": True},
+                    "title": {"type": "string", "default": None},
+                },
+            ),
+            notes_write,
+        ),
+        (
+            ToolSchema(
+                "notes.read",
+                "Read project note(s)",
+                parameters={
+                    "name": {"type": "string", "default": None},
+                },
+            ),
+            notes_read,
+        ),
+        (
+            ToolSchema(
+                "notes.update",
+                "Update a project note (saves history)",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "content": {"type": "string", "required": True},
+                },
+            ),
+            notes_update,
+        ),
+        (
+            ToolSchema(
+                "notes.rename",
+                "Rename a project note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "new_name": {"type": "string", "required": True},
+                },
+            ),
+            notes_rename,
+        ),
+        (
+            ToolSchema(
+                "notes.delete",
+                "Soft-delete a project note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                },
+            ),
+            notes_delete,
+        ),
+        (
+            ToolSchema(
+                "notes.restore",
+                "Restore a soft-deleted note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                },
+            ),
+            notes_restore,
+        ),
+        (
+            ToolSchema(
+                "notes.tag",
+                "Tag a project note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "tags": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "required": True,
+                    },
+                },
+            ),
+            notes_tag,
+        ),
+        (
+            ToolSchema(
+                "notes.pin",
+                "Pin or unpin a project note",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "pinned": {"type": "boolean", "default": True},
+                },
+            ),
+            notes_pin,
+        ),
+        (
+            ToolSchema(
+                "notes.list",
+                "List notes with index metadata (tags, pinned, timestamps)",
+            ),
+            notes_list_indexed,
+        ),
+        (
+            ToolSchema(
+                "notes.history.list",
+                "List available versions of a note",
+                parameters={
+                    "name": {"type": "string", "required": True},
+                },
+            ),
+            notes_history_list,
+        ),
+        (
+            ToolSchema(
+                "notes.history.read",
+                "Read a specific version of a note from history",
+                parameters={
+                    "name": {"type": "string", "required": True},
+                    "version": {"type": "string", "required": True},
+                },
+            ),
+            notes_history_read,
+        ),
+        (
+            ToolSchema(
+                "notes.search",
+                "Search notes by keyword in content, title, or tags",
+                parameters={
+                    "query": {"type": "string", "required": True},
+                    "scope": {"type": "string", "default": "all"},
+                },
+            ),
+            notes_search,
+        ),
+        (
+            ToolSchema(
+                "notes.inject",
+                "Inject a note into the current goal context",
+                mutates=True,
+                parameters={
+                    "name": {"type": "string", "required": True},
+                },
+            ),
+            notes_inject,
+        ),
     ]

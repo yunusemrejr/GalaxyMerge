@@ -22,6 +22,7 @@ def search_duckduckgo(query: str, max_results: int = 10) -> list[dict[str, Any]]
             href = link.get("href", "")
             if "uddg=" in href:
                 import urllib.parse
+
                 parsed = urllib.parse.parse_qs(urllib.parse.urlparse(href).query)
                 href = parsed.get("uddg", [href])[0]
             snippet_el = link.find_parent(".result") or link.find_next_sibling()

@@ -17,7 +17,13 @@ class WebSearch:
     def _init_cache(self) -> None:
         if not self.cache_dir:
             return
-        for name in ("searches", "fetched_pages", "wikipedia", "duckduckgo", "curl_fetches"):
+        for name in (
+            "searches",
+            "fetched_pages",
+            "wikipedia",
+            "duckduckgo",
+            "curl_fetches",
+        ):
             p = self.cache_dir / "web" / f"{name}.jsonl"
             p.parent.mkdir(parents=True, exist_ok=True)
 

@@ -15,7 +15,12 @@ EVIDENCE_RANKING: list[str] = [
     "unsupported_assumption",
 ]
 
-CORE_PERSPECTIVES: Final[tuple[str, ...]] = ("planner", "implementer", "reviewer", "skeptic")
+CORE_PERSPECTIVES: Final[tuple[str, ...]] = (
+    "planner",
+    "implementer",
+    "reviewer",
+    "skeptic",
+)
 
 
 def validate_schema(role: str, parsed: dict[str, Any]) -> list[str]:
@@ -69,36 +74,81 @@ class Synthesizer:
 
                 if role == "planner":
                     for step in parsed.get("steps", []):
-                        all_findings.append({"type": "step", "content": step, "source": role, "evidence": parsed.get("goal_understanding", "")})
+                        all_findings.append(
+                            {
+                                "type": "step",
+                                "content": step,
+                                "source": role,
+                                "evidence": parsed.get("goal_understanding", ""),
+                            }
+                        )
                     for f in parsed.get("relevant_files", []):
-                        all_findings.append({"type": "file", "content": f, "source": role})
+                        all_findings.append(
+                            {"type": "file", "content": f, "source": role}
+                        )
 
                 elif role == "scout":
                     for f in parsed.get("files_found", []):
-                        all_findings.append({"type": "file", "content": f, "source": role, "evidence": "tool_logs"})
+                        all_findings.append(
+                            {
+                                "type": "file",
+                                "content": f,
+                                "source": role,
+                                "evidence": "tool_logs",
+                            }
+                        )
                     if parsed.get("architecture_summary"):
-                        all_findings.append({"type": "architecture", "content": parsed["architecture_summary"], "source": role})
+                        all_findings.append(
+                            {
+                                "type": "architecture",
+                                "content": parsed["architecture_summary"],
+                                "source": role,
+                            }
+                        )
 
                 elif role == "implementer":
                     for change in parsed.get("changes", []):
                         all_changes.append(change)
-                        all_findings.append({"type": "change", "content": f"{change.get('action', '')}: {change.get('file', '')}", "source": role, "rationale": change.get("rationale", "")})
+                        all_findings.append(
+                            {
+                                "type": "change",
+                                "content": f"{change.get('action', '')}: {change.get('file', '')}",
+                                "source": role,
+                                "rationale": change.get("rationale", ""),
+                            }
+                        )
 
                 elif role == "reviewer":
                     for finding in parsed.get("findings", []):
-                        all_findings.append({**finding, "source": role, "type": finding.get("type", "finding")})
+                        all_findings.append(
+                            {
+                                **finding,
+                                "source": role,
+                                "type": finding.get("type", "finding"),
+                            }
+                        )
                     all_risks.extend(parsed.get("risks", []))
 
                 elif role == "skeptic":
                     if not parsed.get("completion_claim_valid", True):
                         for blocker in parsed.get("blockers", []):
-                            contradictions.append({"type": "blocker", "description": blocker, "source": role})
+                            contradictions.append(
+                                {
+                                    "type": "blocker",
+                                    "description": blocker,
+                                    "source": role,
+                                }
+                            )
 
         deduplicated = self._deduplicate(all_findings)
         evidence_scored = self._score_by_evidence(deduplicated)
         resolved = self._resolve_contradictions(contradictions, all_changes)
-        missing_perspectives = self._missing_perspectives(successful_roles, failed_roles)
-        confidence = self._completion_confidence(missing_perspectives, errors, schema_errors)
+        missing_perspectives = self._missing_perspectives(
+            successful_roles, failed_roles
+        )
+        confidence = self._completion_confidence(
+            missing_perspectives, errors, schema_errors
+        )
 
         return {
             "plan": self._build_plan(all_changes, evidence_scored),
@@ -124,9 +174,18 @@ class Synthesizer:
         repaired = repair_malformed(content)
         try:
             parsed = json.loads(repaired)
-            return {"valid": True, "parsed": parsed, "was_repaired": repaired != content}
+            return {
+                "valid": True,
+                "parsed": parsed,
+                "was_repaired": repaired != content,
+            }
         except json.JSONDecodeError as e:
-            return {"valid": False, "parsed": {"raw": content}, "error": str(e), "was_repaired": False}
+            return {
+                "valid": False,
+                "parsed": {"raw": content},
+                "error": str(e),
+                "was_repaired": False,
+            }
 
     def _deduplicate(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
         seen = set()
@@ -138,7 +197,9 @@ class Synthesizer:
                 unique.append(f)
         return unique
 
-    def _score_by_evidence(self, findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _score_by_evidence(
+        self, findings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         scored = []
         for f in findings:
             evidence = f.get("evidence", "")
@@ -155,7 +216,9 @@ class Synthesizer:
             scored.append(f)
         return sorted(scored, key=lambda x: x.get("confidence", 0), reverse=True)
 
-    def _missing_perspectives(self, successful_roles: set[str], failed_roles: set[str]) -> list[str]:
+    def _missing_perspectives(
+        self, successful_roles: set[str], failed_roles: set[str]
+    ) -> list[str]:
         missing = [role for role in CORE_PERSPECTIVES if role not in successful_roles]
         for role in sorted(failed_roles):
             if role not in missing:
@@ -175,27 +238,34 @@ class Synthesizer:
         penalty += 0.1 * len(schema_errors)
         return round(max(0.0, 1.0 - penalty), 2)
 
-    def _resolve_contradictions(self, contradictions: list[dict[str, Any]], changes: list[dict[str, Any]]) -> list[str]:
+    def _resolve_contradictions(
+        self, contradictions: list[dict[str, Any]], changes: list[dict[str, Any]]
+    ) -> list[str]:
         import re
+
         resolved = []
         for c in contradictions:
             if c.get("type") == "blocker":
                 description = c.get("description", "")
-                desc_words = set(re.findall(r'\w+', description.lower()))
+                desc_words = set(re.findall(r"\w+", description.lower()))
                 matched = []
                 for ch in changes:
                     ch_text = str(ch).lower()
-                    ch_words = set(re.findall(r'\w+', ch_text))
+                    ch_words = set(re.findall(r"\w+", ch_text))
                     overlap = desc_words & ch_words
                     if len(overlap) >= 1:
                         matched.append(ch.get("file", ""))
                 if matched:
-                    resolved.append(f"blocker '{description}' addressed by changes to {', '.join(matched)}")
+                    resolved.append(
+                        f"blocker '{description}' addressed by changes to {', '.join(matched)}"
+                    )
                 else:
                     resolved.append(f"unresolved blocker: {description}")
         return resolved
 
-    def _build_plan(self, changes: list[dict[str, Any]], findings: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    def _build_plan(
+        self, changes: list[dict[str, Any]], findings: list[dict[str, Any]]
+    ) -> list[dict[str, Any]]:
         plan = []
         file_order = []
         seen_files = set()
@@ -214,17 +284,24 @@ class Synthesizer:
             matching_changes = [c for c in changes if c.get("file") == fp]
             if matching_changes:
                 for c in matching_changes:
-                    plan.append({
-                        "tool": "file.write",
-                        "params": {"path": c.get("file", ""), "content": c.get("diff", "")},
-                        "rationale": c.get("rationale", ""),
-                    })
+                    plan.append(
+                        {
+                            "tool": "file.write",
+                            "params": {
+                                "path": c.get("file", ""),
+                                "content": c.get("diff", ""),
+                            },
+                            "rationale": c.get("rationale", ""),
+                        }
+                    )
             else:
-                plan.append({
-                    "tool": "file.read",
-                    "params": {"path": fp},
-                    "rationale": "inspect relevant file",
-                })
+                plan.append(
+                    {
+                        "tool": "file.read",
+                        "params": {"path": fp},
+                        "rationale": "inspect relevant file",
+                    }
+                )
         return plan
 
     def _build_summary(

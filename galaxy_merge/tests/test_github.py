@@ -1,9 +1,8 @@
-
-
 import pytest
 
-pytestmark = [pytest.mark.unit]
 from galaxy_merge.github.scanner import GitHubScanner
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestGitHubScanner:
@@ -27,7 +26,9 @@ class TestGitHubScanner:
 
     def test_scan_from_git_remote(self):
         scanner = GitHubScanner()
-        https_url = "git@github.com:user/repo.git".replace("git@github.com:", "https://github.com/").replace(".git", "")
+        https_url = "git@github.com:user/repo.git".replace(
+            "git@github.com:", "https://github.com/"
+        ).replace(".git", "")
         owner, repo = scanner._parse_url(https_url)
         assert owner == "user"
         assert repo == "repo"

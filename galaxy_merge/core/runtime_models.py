@@ -33,7 +33,15 @@ class GoalState(BaseModel):
     session_id: str
     text: str
     parsed: dict[str, Any] | None = None
-    status: Literal["queued", "understanding", "planning", "executing", "testing", "complete", "failed"] = "queued"
+    status: Literal[
+        "queued",
+        "understanding",
+        "planning",
+        "executing",
+        "testing",
+        "complete",
+        "failed",
+    ] = "queued"
     created_at: datetime
     updated_at: datetime
 
@@ -43,7 +51,9 @@ class ToolCall(BaseModel):
     session_id: str
     tool: str
     params: dict[str, Any]
-    status: Literal["requested", "running", "success", "blocked", "failed"] = "requested"
+    status: Literal["requested", "running", "success", "blocked", "failed"] = (
+        "requested"
+    )
     started_at: datetime | None = None
     finished_at: datetime | None = None
     error: str | None = None

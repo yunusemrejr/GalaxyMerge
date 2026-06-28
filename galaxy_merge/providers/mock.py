@@ -42,7 +42,9 @@ class MockProvider(ProviderBase):
             await asyncio.sleep(self._delay)
 
         role = self._extract_role(messages)
-        self.call_history.append({"role": role, "model": model, "provider": self.provider_id})
+        self.call_history.append(
+            {"role": role, "model": model, "provider": self.provider_id}
+        )
 
         failure = self._mock_failures.get(role)
         if failure:
@@ -63,7 +65,11 @@ class MockProvider(ProviderBase):
             }
 
         response_data = self._mock_responses.get(role, {})
-        content = json.dumps(response_data) if response_data else json.dumps({"raw": "mock response"})
+        content = (
+            json.dumps(response_data)
+            if response_data
+            else json.dumps({"raw": "mock response"})
+        )
         return {
             "success": True,
             "content": content,

@@ -13,7 +13,7 @@ if command -v trufflehog >/dev/null 2>&1; then
 fi
 
 SECRET_RE='(-----BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY-----|sk-(proj-)?[A-Za-z0-9_-]{40,}|ghp_[A-Za-z0-9_]{36,}|github_pat_[A-Za-z0-9_]{40,}|xox[baprs]-[A-Za-z0-9-]{40,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,}|npm_[A-Za-z0-9]{30,}|Bearer[[:space:]][A-Za-z0-9._-]{40,}|(api[_-]?key|secret|token|password)[[:space:]]*[:=][[:space:]]*["'\''][^"'\'']{20,}["'\''])'
-PLACEHOLDER_RE='(EXAMPLE|example|test|fake|placeholder|1234567890abcdef|abc123|def456|hunter2|my_super_secret|sk-xxxx|sk-xxx|sk-[x]{10,}|ghp_[x]{10,}|ghp_[0-9]{10,}|ghp_123456789012345678901234567890123456|sk-1234567890abcdef1234567890abcdef|MIIEpQIBAAKCAQEA|MIIEpQIBAAK|ABCDEFG|b3BlbnNzaC1rZXktdjE|GM_EXAMPLE_PROVIDER_API_KEY|self\.api_key|\{self\.api_key\}|os\.environ\.get|YOUR_.*_KEY_HERE|REPLACE_ME|CHANGEME)'
+PLACEHOLDER_RE='(EXAMPLE|example|test|fake|placeholder|1234567890abcdef|abc123|def456|hunter2|my_super_secret|sk-xxxx|sk-xxx|sk-[x]{10,}|ghp_[x]{10,}|ghp_[0-9]{10,}|ghp_123456789012345678901234567890123456|sk-1234567890abcdef1234567890abcdef|MIIEpQIBAAKCAQEA|MIIEpQIBAAK|ABCDEFG|b3BlbnNzaC1rZXktdjE|GM_EXAMPLE_PROVIDER_API_KEY|self\.api_key|\{self\.api_key\}|os\.environ\.get|YOUR_.*_KEY_HERE|REPLACE_ME|CHANGEME|sk-test-key-[0-9]+|sk-ant-test-key-[0-9]+|AIza_super_secret_[0-9]+|sk-real-test-key-[0-9]+|BEGIN (RSA |OPENSSH |EC |DSA )?PRIVATE KEY)'
 FORBIDDEN_PATH_RE='(^|/)(\.env($|\.)|providers\.json$|models\.json$|routing\.json$|fusion\.json$|remote-targets\.json$|.*secret.*\.json$|.*credential.*\.json$|.*endpoint.*\.json$)'
 
 failed=0

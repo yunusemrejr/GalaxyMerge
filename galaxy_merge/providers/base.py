@@ -18,12 +18,10 @@ class ProviderBase(ABC):
         temperature: float = 0.7,
         max_tokens: int | None = None,
         stream: bool = False,
-    ) -> dict[str, Any]:
-        ...
+    ) -> dict[str, Any]: ...
 
     @abstractmethod
-    async def check_health(self) -> bool:
-        ...
+    async def check_health(self) -> bool: ...
 
     @property
     def healthy(self) -> bool:

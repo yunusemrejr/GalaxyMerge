@@ -1,16 +1,13 @@
+import base64
 
 import pytest
 
-pytestmark = [pytest.mark.unit]
-
-
-import base64
-
 from galaxy_merge.browser.console_logs import ConsoleLogCollector
-from galaxy_merge.browser.network_logs import NetworkLogCollector
-from galaxy_merge.browser.screenshots import ScreenshotManager
 from galaxy_merge.browser.dom import DOMInspector
 from galaxy_merge.browser.manager import BrowserManager
+from galaxy_merge.browser.network_logs import NetworkLogCollector
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestConsoleLogCollector:
@@ -68,7 +65,9 @@ class TestDOMInspector:
 
 
 class TestBrowserManagerCommands:
-    def test_open_session_records_debug_port_and_headless_flags(self, monkeypatch, tmp_path):
+    def test_open_session_records_debug_port_and_headless_flags(
+        self, monkeypatch, tmp_path
+    ):
         # Given: Chrome exists and the harness is running without a display.
         manager = BrowserManager(tmp_path)
         started = {}
@@ -99,7 +98,9 @@ class TestBrowserManagerCommands:
         assert manager._debug_port("sess_a") == opened["debug_port"]
         assert "--headless=new" in started["args"]
 
-    def test_navigate_reload_dom_snapshot_and_close_use_scoped_cdp(self, monkeypatch, tmp_path):
+    def test_navigate_reload_dom_snapshot_and_close_use_scoped_cdp(
+        self, monkeypatch, tmp_path
+    ):
         # Given: an existing browser session with a DevTools port.
         manager = BrowserManager(tmp_path)
         manager._sessions["sess_a"] = {
@@ -115,7 +116,11 @@ class TestBrowserManagerCommands:
         def fake_send(port, method, params=None):
             commands.append((port, method, params or {}))
             if method == "Runtime.evaluate":
-                return {"result": {"result": {"value": "<html><body><main>OK</main></body></html>"}}}
+                return {
+                    "result": {
+                        "result": {"value": "<html><body><main>OK</main></body></html>"}
+                    }
+                }
             return {"result": {}}
 
         monkeypatch.setattr("galaxy_merge.browser.manager.send_page_command", fake_send)
@@ -168,7 +173,10 @@ class TestBrowserManagerCommands:
         assert result["success"] is True
         assert result["source"] == "cdp"
         screenshot_path = result["screenshot_path"]
-        assert tmp_path.joinpath("browser", "screenshots", "sess_a_page.png").read_bytes() == png_bytes
+        assert (
+            tmp_path.joinpath("browser", "screenshots", "sess_a_page.png").read_bytes()
+            == png_bytes
+        )
         assert screenshot_path.endswith("sess_a_page.png")
 
 
@@ -176,7 +184,10 @@ class TestBrowserTools:
     def test_required_browser_tool_surface_is_registered(self, tmp_path):
         from galaxy_merge.tools.browser_tools import make_browser_tools
 
-        schemas = {schema.name: schema for schema, _handler in make_browser_tools(tmp_path, "owner")}
+        schemas = {
+            schema.name: schema
+            for schema, _handler in make_browser_tools(tmp_path, "owner")
+        }
 
         assert "browser.reload" in schemas
         assert "browser.navigate" in schemas
@@ -195,19 +206,29 @@ class TestCDPPageErrors:
         page_errors = PageErrorCollector(tmp_path, "sess_a")
         monitor = CDPMonitor(0, console, network, page_errors)
 
-        monitor._handle_event({
-            "method": "Runtime.exceptionThrown",
-            "params": {
-                "exceptionDetails": {
-                    "url": "app.js",
-                    "exception": {"description": "ReferenceError: missingThing is not defined"},
+        monitor._handle_event(
+            {
+                "method": "Runtime.exceptionThrown",
+                "params": {
+                    "exceptionDetails": {
+                        "url": "app.js",
+                        "exception": {
+                            "description": "ReferenceError: missingThing is not defined"
+                        },
+                    },
                 },
-            },
-        })
-        monitor._handle_event({
-            "method": "Network.loadingFailed",
-            "params": {"requestId": "asset.js", "type": "Script", "errorText": "net::ERR_FAILED"},
-        })
+            }
+        )
+        monitor._handle_event(
+            {
+                "method": "Network.loadingFailed",
+                "params": {
+                    "requestId": "asset.js",
+                    "type": "Script",
+                    "errorText": "net::ERR_FAILED",
+                },
+            }
+        )
 
         errors = page_errors.get_errors()
         assert len(errors) == 2

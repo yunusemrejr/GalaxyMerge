@@ -1,21 +1,23 @@
-"""
-Verify project notes are first-class persistent objects.
+"""Verify project notes are first-class persistent objects.
 
 Tests every requirement: create, read, edit, rename, delete, restore version,
 list, search, tag, pin, inject into goal context, note-role tracking,
 persistence across restarts, .gm/notes/ storage, separation from memory.
 """
 
-
 import json
-from pathlib import Path
+
 import pytest
 
-pytestmark = [pytest.mark.unit]
-
 from galaxy_merge.core.session import init_gm_dir, Session
-from galaxy_merge.tools.notes_tools import make_notes_tools, get_injected_notes, clear_goal_injections
 from galaxy_merge.memory.retrieval import MemoryRetriever
+from galaxy_merge.tools.notes_tools import (
+    make_notes_tools,
+    get_injected_notes,
+    clear_goal_injections,
+)
+
+pytestmark = [pytest.mark.unit]
 
 
 async def _tools(gm_dir):
@@ -26,12 +28,15 @@ async def _tools(gm_dir):
 # 1. CREATE — verified
 # =============================================================================
 
+
 class TestNotesCreate:
     @pytest.mark.asyncio
     async def test_create_note(self, tmp_path):
         init_gm_dir(tmp_path)
         t = await _tools(tmp_path / ".gm")
-        r = await t["notes.create"]("architecture", "Uses FastAPI", "Architecture Notes")
+        r = await t["notes.create"](
+            "architecture", "Uses FastAPI", "Architecture Notes"
+        )
         assert r.success
         assert (tmp_path / ".gm" / "notes" / "architecture.md").exists()
 
@@ -59,6 +64,7 @@ class TestNotesCreate:
 # =============================================================================
 # 2. READ — verified
 # =============================================================================
+
 
 class TestNotesRead:
     @pytest.mark.asyncio
@@ -92,6 +98,7 @@ class TestNotesRead:
 # 3. EDIT — verified
 # =============================================================================
 
+
 class TestNotesEdit:
     @pytest.mark.asyncio
     async def test_edit_note(self, tmp_path):
@@ -113,6 +120,7 @@ class TestNotesEdit:
 # =============================================================================
 # 4. RENAME — verified
 # =============================================================================
+
 
 class TestNotesRename:
     @pytest.mark.asyncio
@@ -144,6 +152,7 @@ class TestNotesRename:
 # 5. DELETE (soft) — verified
 # =============================================================================
 
+
 class TestNotesDelete:
     @pytest.mark.asyncio
     async def test_soft_delete(self, tmp_path):
@@ -168,6 +177,7 @@ class TestNotesDelete:
 # =============================================================================
 # 6. RESTORE VERSION — verified
 # =============================================================================
+
 
 class TestNotesRestoreVersion:
     @pytest.mark.asyncio
@@ -211,6 +221,7 @@ class TestNotesRestoreVersion:
 # 7. LIST — verified
 # =============================================================================
 
+
 class TestNotesList:
     @pytest.mark.asyncio
     async def test_list_indexed(self, tmp_path):
@@ -228,6 +239,7 @@ class TestNotesList:
 # =============================================================================
 # 8. SEARCH — verified
 # =============================================================================
+
 
 class TestNotesSearch:
     @pytest.mark.asyncio
@@ -264,6 +276,7 @@ class TestNotesSearch:
 # 9. TAG — verified
 # =============================================================================
 
+
 class TestNotesTag:
     @pytest.mark.asyncio
     async def test_tag_note(self, tmp_path):
@@ -294,6 +307,7 @@ class TestNotesTag:
 # 10. PIN/UNPIN — verified
 # =============================================================================
 
+
 class TestNotesPin:
     @pytest.mark.asyncio
     async def test_pin_note(self, tmp_path):
@@ -321,6 +335,7 @@ class TestNotesPin:
 # =============================================================================
 # 11. INJECT INTO GOAL CONTEXT — verified
 # =============================================================================
+
 
 class TestNotesInject:
     @pytest.mark.asyncio
@@ -363,6 +378,7 @@ class TestNotesInject:
 # 12. NOTE-ROLE TRACKING — verified
 # =============================================================================
 
+
 class TestNoteRoleTracking:
     @pytest.mark.asyncio
     async def test_retriever_tracks_usage(self, tmp_path):
@@ -391,6 +407,7 @@ class TestNoteRoleTracking:
 # =============================================================================
 # PERSISTENCE ACROSS RESTARTS — verified
 # =============================================================================
+
 
 class TestNotesPersistence:
     @pytest.mark.asyncio
@@ -448,6 +465,7 @@ class TestNotesPersistence:
 # STORAGE LOCATION — verified
 # =============================================================================
 
+
 class TestNotesStorage:
     def test_stored_under_gm_notes(self, tmp_path):
         init_gm_dir(tmp_path)
@@ -470,6 +488,7 @@ class TestNotesStorage:
 # =============================================================================
 # SEPARATION: session notes, project notes, machine memory — verified
 # =============================================================================
+
 
 class TestNotesSeparation:
     def test_notes_and_memory_separate_dirs(self, tmp_path):

@@ -13,6 +13,13 @@ def make_index_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
         return ToolResult(success=True, data=result)
 
     return [
-        (ToolSchema("workspace.index", "Refresh workspace index", mutates=True, requires_safety=False),
-         index_refresh),
+        (
+            ToolSchema(
+                "workspace.index",
+                "Refresh workspace index",
+                mutates=True,
+                requires_safety=False,
+            ),
+            index_refresh,
+        ),
     ]

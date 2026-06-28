@@ -1,13 +1,11 @@
 import hashlib
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
 from pydantic import BaseModel
 
-from galaxy_merge.cache.keys import set_config_hash
 from galaxy_merge.core.locks import atomic_write
 
 logger = logging.getLogger("galaxy_merge.config")
@@ -51,7 +49,13 @@ def save_json(path: Path, data: dict[str, Any]) -> None:
 
 def compute_config_hash(config_dir: Path) -> str:
     parts = []
-    for name in ("providers.json", "models.json", "fusion.json", "routing.json", "safety.json"):
+    for name in (
+        "providers.json",
+        "models.json",
+        "fusion.json",
+        "routing.json",
+        "safety.json",
+    ):
         p = config_dir / name
         if p.exists():
             parts.append(p.read_text())
@@ -80,7 +84,9 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
         raw = OPENCODE_CONFIG_PATH.read_text()
         oc_config = json.loads(raw)
     except (json.JSONDecodeError, OSError) as e:
-        logger.warning("Failed to parse OpenCode config at %s: %s", OPENCODE_CONFIG_PATH, e)
+        logger.warning(
+            "Failed to parse OpenCode config at %s: %s", OPENCODE_CONFIG_PATH, e
+        )
         return False
 
     oc_providers = oc_config.get("provider", {})
@@ -97,7 +103,11 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
 
     for oc_name, oc_cfg in oc_providers.items():
         gm_name = oc_name.replace("-", "_")
-        if gm_name in (existing_providers.get("providers", {}) if existing_providers.get("providers") else {}):
+        if gm_name in (
+            existing_providers.get("providers", {})
+            if existing_providers.get("providers")
+            else {}
+        ):
             continue
 
         options = oc_cfg.get("options", {})
@@ -114,7 +124,9 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
             "enabled": True,
             "type": "openai_compatible",
             "base_url": base_url,
-            "auth": {"type": "env", "env_var": auth_env_var} if auth_env_var else {"type": "none"},
+            "auth": {"type": "env", "env_var": auth_env_var}
+            if auth_env_var
+            else {"type": "none"},
             "timeout_seconds": 120,
         }
 
@@ -128,7 +140,11 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
             gm_model_id = oc_model_name.replace(":", "-").replace("/", "-")
             model_key = f"{gm_name}:{gm_model_id}"
 
-            if model_key in (existing_models.get("models", {}) if existing_models.get("models") else {}):
+            if model_key in (
+                existing_models.get("models", {})
+                if existing_models.get("models")
+                else {}
+            ):
                 continue
 
             limits = oc_model_cfg.get("limit", {})
@@ -161,7 +177,9 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
             context_window_val = limits.get("context", 0)
             if context_window_val and context_window_val >= 1000000:
                 latency_tier = "fast"
-            if oc_model_name.startswith(("deepseek-reasoner", "nemotron-3-ultra", "nemotron-3-super")):
+            if oc_model_name.startswith(
+                ("deepseek-reasoner", "nemotron-3-ultra", "nemotron-3-super")
+            ):
                 cost_tier = "medium" if "deepseek" in oc_model_name else "high"
                 latency_tier = "slow" if "ultra" in oc_model_name else "medium"
 
@@ -187,6 +205,9 @@ def import_opencode_providers(gm_config_dir: Path) -> bool:
         existing_models.setdefault("schema_version", 1)
         save_json(gm_providers_path, existing_providers)
         save_json(gm_models_path, existing_models)
-        logger.info("Imported %d OpenCode providers into Galaxy Merge config", len(existing_providers.get("providers", {})))
+        logger.info(
+            "Imported %d OpenCode providers into Galaxy Merge config",
+            len(existing_providers.get("providers", {})),
+        )
 
     return changed

@@ -23,6 +23,7 @@ class GitHubScanner:
 
     def _cache_key(self, url: str) -> str:
         import hashlib
+
         return hashlib.sha256(url.encode()).hexdigest()[:16]
 
     def _get_cached(self, url: str) -> dict[str, Any] | None:
@@ -85,7 +86,9 @@ class GitHubScanner:
             "open_issues_count": repo_data.get("open_issues_count", 0),
             "default_branch": repo_data.get("default_branch", "main"),
             "topics": repo_data.get("topics", []),
-            "license": repo_data.get("license", {}).get("spdx_id", "") if repo_data.get("license") else "",
+            "license": repo_data.get("license", {}).get("spdx_id", "")
+            if repo_data.get("license")
+            else "",
             "file_tree": self._summarize_tree(contents),
             "readme": readme,
             "recent_releases": releases,
@@ -96,7 +99,9 @@ class GitHubScanner:
         return result
 
     async def scan_from_git_remote(self, remote_url: str) -> dict[str, Any]:
-        https_url = remote_url.replace("git@github.com:", "https://github.com/").replace(".git", "")
+        https_url = remote_url.replace(
+            "git@github.com:", "https://github.com/"
+        ).replace(".git", "")
         return await self.scan_repo(https_url)
 
     async def _get_repo(self, owner: str, repo: str) -> dict[str, Any]:
@@ -115,7 +120,9 @@ class GitHubScanner:
             except Exception as e:
                 return {"error": str(e)}
 
-    async def _get_contents(self, owner: str, repo: str, path: str = "") -> list[dict[str, Any]]:
+    async def _get_contents(
+        self, owner: str, repo: str, path: str = ""
+    ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=15) as client:
             try:
                 url = f"{self.base_url}/repos/{owner}/{repo}/contents/{path}"
@@ -134,20 +141,26 @@ class GitHubScanner:
                 if response.status_code == 200:
                     data = response.json()
                     import base64
+
                     content = data.get("content", "")
                     if content:
-                        decoded = base64.b64decode(content).decode("utf-8", errors="replace")
+                        decoded = base64.b64decode(content).decode(
+                            "utf-8", errors="replace"
+                        )
                         return decoded[:5000]
                 return ""
             except Exception:
                 return ""
 
-    async def _get_releases(self, owner: str, repo: str, count: int = 5) -> list[dict[str, Any]]:
+    async def _get_releases(
+        self, owner: str, repo: str, count: int = 5
+    ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=15) as client:
             try:
                 url = f"{self.base_url}/repos/{owner}/{repo}/releases"
                 response = await client.get(
-                    url, headers=self._headers(),
+                    url,
+                    headers=self._headers(),
                     params={"per_page": count},
                 )
                 if response.status_code == 200:
@@ -165,12 +178,15 @@ class GitHubScanner:
             except Exception:
                 return []
 
-    async def _get_issues(self, owner: str, repo: str, count: int = 5) -> list[dict[str, Any]]:
+    async def _get_issues(
+        self, owner: str, repo: str, count: int = 5
+    ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=15) as client:
             try:
                 url = f"{self.base_url}/repos/{owner}/{repo}/issues"
                 response = await client.get(
-                    url, headers=self._headers(),
+                    url,
+                    headers=self._headers(),
                     params={"state": "open", "per_page": count, "sort": "updated"},
                 )
                 if response.status_code == 200:
@@ -180,7 +196,9 @@ class GitHubScanner:
                             "title": i.get("title", ""),
                             "state": i.get("state", ""),
                             "updated_at": i.get("updated_at", ""),
-                            "labels": [l.get("name", "") for l in i.get("labels", [])],
+                            "labels": [
+                                label.get("name", "") for label in i.get("labels", [])
+                            ],
                         }
                         for i in response.json()
                         if "pull_request" not in i
@@ -189,12 +207,15 @@ class GitHubScanner:
             except Exception:
                 return []
 
-    async def _get_pull_requests(self, owner: str, repo: str, count: int = 5) -> list[dict[str, Any]]:
+    async def _get_pull_requests(
+        self, owner: str, repo: str, count: int = 5
+    ) -> list[dict[str, Any]]:
         async with httpx.AsyncClient(timeout=15) as client:
             try:
                 url = f"{self.base_url}/repos/{owner}/{repo}/pulls"
                 response = await client.get(
-                    url, headers=self._headers(),
+                    url,
+                    headers=self._headers(),
                     params={"state": "open", "per_page": count, "sort": "updated"},
                 )
                 if response.status_code == 200:
@@ -224,14 +245,18 @@ class GitHubScanner:
     def _summarize_tree(self, contents: list[dict[str, Any]]) -> list[dict[str, Any]]:
         tree = []
         for item in contents[:30]:
-            tree.append({
-                "name": item.get("name", ""),
-                "type": item.get("type", ""),
-                "path": item.get("path", ""),
-            })
+            tree.append(
+                {
+                    "name": item.get("name", ""),
+                    "type": item.get("type", ""),
+                    "path": item.get("path", ""),
+                }
+            )
         return tree
 
-    async def search_code(self, query: str, owner: str | None = None, repo: str | None = None) -> list[dict[str, Any]]:
+    async def search_code(
+        self, query: str, owner: str | None = None, repo: str | None = None
+    ) -> list[dict[str, Any]]:
         q = query
         if owner and repo:
             q = f"{query} repo:{owner}/{repo}"
@@ -245,7 +270,11 @@ class GitHubScanner:
                 response.raise_for_status()
                 data = response.json()
                 return [
-                    {"name": item.get("name", ""), "path": item.get("path", ""), "url": item.get("html_url", "")}
+                    {
+                        "name": item.get("name", ""),
+                        "path": item.get("path", ""),
+                        "url": item.get("html_url", ""),
+                    }
                     for item in data.get("items", [])
                 ]
             except Exception as e:

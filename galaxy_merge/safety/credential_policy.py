@@ -1,4 +1,3 @@
-import os
 import re
 from pathlib import Path
 from typing import Any
@@ -51,17 +50,21 @@ SENSITIVE_PATH_PARTS: list[str] = [
     "service-account-key",
 ]
 
-ENV_VAR_PATTERN = re.compile(r'\$\{?(OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GEMINI_API_KEY|'
-                             r'MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|'
-                             r'GITHUB_TOKEN|GH_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|'
-                             r'DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)\}?')
+ENV_VAR_PATTERN = re.compile(
+    r"\$\{?(OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GEMINI_API_KEY|"
+    r"MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|"
+    r"GITHUB_TOKEN|GH_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|"
+    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)\}?"
+)
 
 # Also catch bare env-var-style assignments like OPENAI_API_KEY=sk-...
-ENV_ASSIGN_PATTERN = re.compile(r'(OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GEMINI_API_KEY|'
-                                r'MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|'
-                                r'GITHUB_TOKEN|GH_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|'
-                                r'DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)'
-                                r'\s*=\s*\S+')
+ENV_ASSIGN_PATTERN = re.compile(
+    r"(OPENAI_API_KEY|ANTHROPIC_API_KEY|DEEPSEEK_API_KEY|GEMINI_API_KEY|"
+    r"MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|"
+    r"GITHUB_TOKEN|GH_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|"
+    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)"
+    r"\s*=\s*\S+"
+)
 
 ENV_NAME_MAP = {
     "OPENAI_API_KEY": "sk-...",
@@ -91,9 +94,15 @@ class CredentialPolicy:
             if part.startswith("*."):
                 ext = part[1:]
                 if path_lower.endswith(ext):
-                    return {"decision": "block", "reason": f"sensitive file extension: {part}"}
+                    return {
+                        "decision": "block",
+                        "reason": f"sensitive file extension: {part}",
+                    }
             elif part in path_lower:
-                return {"decision": "block", "reason": f"sensitive file pattern: {part}"}
+                return {
+                    "decision": "block",
+                    "reason": f"sensitive file pattern: {part}",
+                }
 
         return {"decision": "allow", "reason": "not a credential path"}
 
@@ -102,35 +111,41 @@ class CredentialPolicy:
         for pattern in SENSITIVE_PATTERNS:
             matches = re.finditer(pattern, text, re.IGNORECASE)
             for m in matches:
-                findings.append({
-                    "pattern": pattern,
-                    "start": m.start(),
-                    "end": m.end(),
-                    "decision": "redact",
-                })
+                findings.append(
+                    {
+                        "pattern": pattern,
+                        "start": m.start(),
+                        "end": m.end(),
+                        "decision": "redact",
+                    }
+                )
 
         env_matches = ENV_VAR_PATTERN.finditer(text)
         for m in env_matches:
             var_name = m.group(1) or m.group(2)
             if var_name:
-                findings.append({
-                    "pattern": f"env_var:{var_name}",
-                    "start": m.start(),
-                    "end": m.end(),
-                    "decision": "redact",
-                    "note": f"environment variable reference: {var_name}",
-                })
+                findings.append(
+                    {
+                        "pattern": f"env_var:{var_name}",
+                        "start": m.start(),
+                        "end": m.end(),
+                        "decision": "redact",
+                        "note": f"environment variable reference: {var_name}",
+                    }
+                )
 
         assign_matches = ENV_ASSIGN_PATTERN.finditer(text)
         for m in assign_matches:
             var_name = m.group(1)
-            findings.append({
-                "pattern": f"env_assign:{var_name}",
-                "start": m.start(),
-                "end": m.end(),
-                "decision": "redact",
-                "note": f"environment variable assignment: {var_name}",
-            })
+            findings.append(
+                {
+                    "pattern": f"env_assign:{var_name}",
+                    "start": m.start(),
+                    "end": m.end(),
+                    "decision": "redact",
+                    "note": f"environment variable assignment: {var_name}",
+                }
+            )
 
         return findings
 
@@ -139,15 +154,12 @@ class CredentialPolicy:
             text = re.sub(pattern, "[REDACTED]", text, flags=re.IGNORECASE)
 
         def redact_env_var(m: re.Match) -> str:
-            full = m.group(0)
             var_name = m.group(1)
-            placeholder = ENV_NAME_MAP.get(var_name, "***ENV_VAR_REDACTED***")
-            return full[:min(4, len(full))] + f"***{var_name}***"
+            return m.group(0)[: min(4, len(m.group(0)))] + f"***{var_name}***"
 
         text = ENV_VAR_PATTERN.sub(redact_env_var, text)
 
         def redact_env_assign(m: re.Match) -> str:
-            full = m.group(0)
             var_name = m.group(1)
             return f"{var_name}=***REDACTED***"
 

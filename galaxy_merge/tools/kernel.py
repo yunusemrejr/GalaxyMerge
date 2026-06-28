@@ -1,4 +1,3 @@
-import asyncio
 import inspect
 import time
 from pathlib import Path
@@ -47,7 +46,12 @@ class ToolKernel:
             if target:
                 result = self.safety.check_path_write(self._safety_target(str(target)))
                 if result["decision"] == "block":
-                    self._emit_event("tool_blocked", session_id=session_id, tool=name, reason=result['reason'])
+                    self._emit_event(
+                        "tool_blocked",
+                        session_id=session_id,
+                        tool=name,
+                        reason=result["reason"],
+                    )
                     return ToolResult(
                         success=False,
                         error=f"safety blocked: {result['reason']}",
@@ -66,13 +70,24 @@ class ToolKernel:
                 **(result.data or {}),
                 "_duration_ms": duration,
             }
-            self._emit_event("tool_completed", session_id=session_id, tool=name, mutates=schema.mutates, duration_ms=duration, success=result.success)
+            self._emit_event(
+                "tool_completed",
+                session_id=session_id,
+                tool=name,
+                mutates=schema.mutates,
+                duration_ms=duration,
+                success=result.success,
+            )
             return result
         except SafetyBlocked as e:
-            self._emit_event("tool_blocked", session_id=session_id, tool=name, reason=str(e))
+            self._emit_event(
+                "tool_blocked", session_id=session_id, tool=name, reason=str(e)
+            )
             return ToolResult(success=False, error=str(e), blocked=True)
         except Exception as e:
-            self._emit_event("tool_failed", session_id=session_id, tool=name, error=str(e))
+            self._emit_event(
+                "tool_failed", session_id=session_id, tool=name, error=str(e)
+            )
             return ToolResult(success=False, error=str(e))
 
     def _emit_event(self, event: str, **kwargs: Any) -> None:

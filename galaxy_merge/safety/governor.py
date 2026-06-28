@@ -47,16 +47,35 @@ class SafetyGovernor:
     def check_command(self, command: str) -> dict[str, Any]:
         if self.is_readonly_mode:
             first_word = command.strip().split()[0] if command.strip() else ""
-            mutation_indicators = ("rm", "mv", "cp", "chmod", "chown", "dd", "mkfs",
-                                   "sudo", "git", "trash", "install", "ln", "touch",
-                                   "mkdir")
+            mutation_indicators = (
+                "rm",
+                "mv",
+                "cp",
+                "chmod",
+                "chown",
+                "dd",
+                "mkfs",
+                "sudo",
+                "git",
+                "trash",
+                "install",
+                "ln",
+                "touch",
+                "mkdir",
+            )
             for indicator in mutation_indicators:
                 if first_word == indicator or command.strip().startswith(indicator):
-                    return {"decision": "block", "reason": "read-only mode: mutations disabled"}
+                    return {
+                        "decision": "block",
+                        "reason": "read-only mode: mutations disabled",
+                    }
 
-            redirect_pipe_pattern = re.compile(r'(?<!\$)[>|]')
+            redirect_pipe_pattern = re.compile(r"(?<!\$)[>|]")
             if redirect_pipe_pattern.search(command):
-                return {"decision": "block", "reason": "read-only mode: redirects and pipes disabled"}
+                return {
+                    "decision": "block",
+                    "reason": "read-only mode: redirects and pipes disabled",
+                }
 
         sp_result = self.self_protection.check_command(command)
         if sp_result["decision"] != "allow":

@@ -1,13 +1,12 @@
 """Unit tests for core config loading and validation."""
 
-
-
 import json
+
 import pytest
 
+from galaxy_merge.core.config import load_json, save_json, load_app_config, AppConfig
+
 pytestmark = [pytest.mark.unit]
-from pathlib import Path
-from galaxy_merge.core.config import load_json, save_json, load_app_config, save_app_config, AppConfig
 
 
 class TestLoadJson:
@@ -42,6 +41,7 @@ class TestAppConfig:
     def test_load_app_config_creates_default(self, tmp_path, monkeypatch):
         # Override the config dir to tmp_path
         from galaxy_merge.core import config as config_module
+
         original_dir = config_module.APP_CONFIG_DIR
         config_module.APP_CONFIG_DIR = tmp_path / ".config"
         try:
@@ -53,6 +53,7 @@ class TestAppConfig:
 
     def test_app_config_defaults(self, tmp_path, monkeypatch):
         from galaxy_merge.core import config as config_module
+
         original_dir = config_module.APP_CONFIG_DIR
         config_module.APP_CONFIG_DIR = tmp_path / ".config"
         try:

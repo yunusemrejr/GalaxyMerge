@@ -1,14 +1,29 @@
 from pathlib import Path
 
 GITIGNORE_PATTERNS: set[str] = {
-    "__pycache__/", "*.py[cod]", "*$py.class",
-    "*.so", ".Python", "env/", "venv/", ".venv/",
-    "dist/", "build/", "*.egg-info/",
-    ".git/", ".gm/cache/",
-    "node_modules/", ".npm/",
-    "target/", "Cargo.lock",
-    ".DS_Store", "*.log", ".coverage",
-    ".mypy_cache/", ".ruff_cache/", ".pytest_cache/",
+    "__pycache__/",
+    "*.py[cod]",
+    "*$py.class",
+    "*.so",
+    ".Python",
+    "env/",
+    "venv/",
+    ".venv/",
+    "dist/",
+    "build/",
+    "*.egg-info/",
+    ".git/",
+    ".gm/cache/",
+    "node_modules/",
+    ".npm/",
+    "target/",
+    "Cargo.lock",
+    ".DS_Store",
+    "*.log",
+    ".coverage",
+    ".mypy_cache/",
+    ".ruff_cache/",
+    ".pytest_cache/",
 }
 
 

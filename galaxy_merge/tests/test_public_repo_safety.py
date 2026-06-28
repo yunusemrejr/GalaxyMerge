@@ -1,12 +1,12 @@
-
-import pytest
-
-pytestmark = [pytest.mark.integration]
-
-
 import json
 import subprocess
 from pathlib import Path
+
+import pytest
+
+REPO_ROOT = Path(__file__).resolve().parents[2]
+
+pytestmark = [pytest.mark.integration]
 
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
@@ -63,17 +63,34 @@ def test_public_example_configs_are_placeholder_only() -> None:
     }
 
     # When: the examples are loaded from the public config directory.
-    loaded = {name: json.loads(path.read_text()) for name, path in example_paths.items()}
+    loaded = {
+        name: json.loads(path.read_text()) for name, path in example_paths.items()
+    }
 
     # Then: they use documentation placeholders, not local provider choices.
     providers = loaded["providers"]["providers"]
     assert set(providers) == {"example_openai_compatible", "example_local_ollama"}
-    assert providers["example_openai_compatible"]["base_url"] == "https://api.example.invalid/v1"
-    assert providers["example_openai_compatible"]["auth"]["env_var"] == "GM_EXAMPLE_PROVIDER_API_KEY"
+    assert (
+        providers["example_openai_compatible"]["base_url"]
+        == "https://api.example.invalid/v1"
+    )
+    assert (
+        providers["example_openai_compatible"]["auth"]["env_var"]
+        == "GM_EXAMPLE_PROVIDER_API_KEY"
+    )
 
     model_text = json.dumps(loaded["models"]).lower()
-    local_provider_names = ("deepseek", "stepfun", "streamlake", "minimax", "openrouter", "moonshot")
-    assert not any(provider_name in model_text for provider_name in local_provider_names)
+    local_provider_names = (
+        "deepseek",
+        "stepfun",
+        "streamlake",
+        "minimax",
+        "openrouter",
+        "moonshot",
+    )
+    assert not any(
+        provider_name in model_text for provider_name in local_provider_names
+    )
 
 
 @pytest.mark.integration

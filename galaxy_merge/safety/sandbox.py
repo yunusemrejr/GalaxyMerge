@@ -20,8 +20,8 @@ class Sandbox:
         env: dict[str, str] | None = None,
     ) -> dict[str, Any]:
         import re
-        SHELL_META = re.compile(r'[;|&$`(){}<>]')
-        has_meta = bool(SHELL_META.search(command))
+
+        re.compile(r"[;|&$`(){}<>]")
 
         cwd = cwd or self.workroot
 
@@ -40,9 +40,19 @@ class Sandbox:
             safe_env.update(env)
 
         redact_keys = [
-            "API_KEY", "TOKEN", "SECRET", "PASSWORD", "CREDENTIAL",
-            "OPENAI", "ANTHROPIC", "DEEPSEEK", "GEMINI",
-            "MINIMAX", "STEPFUN", "STREAMLAKE", "KIMI",
+            "API_KEY",
+            "TOKEN",
+            "SECRET",
+            "PASSWORD",
+            "CREDENTIAL",
+            "OPENAI",
+            "ANTHROPIC",
+            "DEEPSEEK",
+            "GEMINI",
+            "MINIMAX",
+            "STEPFUN",
+            "STREAMLAKE",
+            "KIMI",
         ]
         for key in list(safe_env.keys()):
             for rk in redact_keys:
@@ -89,7 +99,9 @@ class Sandbox:
 
         MAX_OUTPUT = 100_000
         if len(stdout) > MAX_OUTPUT:
-            stdout = stdout[:MAX_OUTPUT] + f"\n... (truncated, {len(stdout)} total chars)"
+            stdout = (
+                stdout[:MAX_OUTPUT] + f"\n... (truncated, {len(stdout)} total chars)"
+            )
 
         return {
             "status": "completed",

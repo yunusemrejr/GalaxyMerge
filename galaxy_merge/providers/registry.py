@@ -1,6 +1,5 @@
 import json
 import logging
-import os
 from pathlib import Path
 from typing import Any
 
@@ -54,7 +53,9 @@ def validate_models_config(data: dict[str, Any], provider_ids: set[str]) -> list
         if not cfg.get("provider"):
             errors.append(f"model '{mid}' missing 'provider' field")
         elif cfg["provider"] not in provider_ids:
-            errors.append(f"model '{mid}' references unknown/disabled provider '{cfg.get('provider')}'")
+            errors.append(
+                f"model '{mid}' references unknown/disabled provider '{cfg.get('provider')}'"
+            )
         if not cfg.get("model"):
             errors.append(f"model '{mid}' missing 'model' field (API model name)")
         if not cfg.get("roles"):
@@ -82,7 +83,9 @@ def validate_fusion_config(data: dict[str, Any]) -> list[str]:
                 errors.append(f"council '{cname}'.roles.'{rname}' must be an object")
                 continue
             if rcfg.get("required", True) and not rcfg.get("model_selector"):
-                errors.append(f"council '{cname}'.roles.'{rname}' required but missing 'model_selector'")
+                errors.append(
+                    f"council '{cname}'.roles.'{rname}' required but missing 'model_selector'"
+                )
     return errors
 
 
@@ -102,7 +105,9 @@ def validate_routing_config(data: dict[str, Any], council_names: set[str]) -> li
             errors.append(f"routing_rules[{i}] missing match.task_type")
         council_name = rule.get("council", "")
         if council_name and council_name not in council_names:
-            errors.append(f"routing_rules[{i}] references unknown council '{council_name}'")
+            errors.append(
+                f"routing_rules[{i}] references unknown council '{council_name}'"
+            )
     fallback = data.get("fallback", {})
     fallback_council = fallback.get("council", "")
     if fallback_council and fallback_council not in council_names:
@@ -110,7 +115,12 @@ def validate_routing_config(data: dict[str, Any], council_names: set[str]) -> li
     return errors
 
 
-def _score_model(model_config: dict[str, Any], role: str, cost_policy: str, prefer_strengths: list[str] | None = None) -> float:
+def _score_model(
+    model_config: dict[str, Any],
+    role: str,
+    cost_policy: str,
+    prefer_strengths: list[str] | None = None,
+) -> float:
     score = 0.0
     strengths = model_config.get("strengths", [])
     preferred = prefer_strengths or []
@@ -172,9 +182,6 @@ class ProviderRegistry:
 
     def load(self) -> None:
         # ── Lazy imports: avoid loading httpx at module level ──────
-        from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
-        from galaxy_merge.providers.local_ollama import OllamaProvider
-        from galaxy_merge.providers.mock import MockProvider
 
         self._providers.clear()
         self._models.clear()
@@ -195,11 +202,14 @@ class ProviderRegistry:
 
         if not existing_providers and not has_mock:
             from galaxy_merge.core.config import import_opencode_providers
+
             import_opencode_providers(self.config_dir)
 
         from galaxy_merge.core.config import compute_config_hash
+
         config_hash = compute_config_hash(self.config_dir)
         from galaxy_merge.cache.keys import set_config_hash
+
         set_config_hash(config_hash)
 
         providers_config: dict[str, Any] = {}
@@ -207,7 +217,8 @@ class ProviderRegistry:
             try:
                 providers_config = json.loads(providers_path.read_text())
                 self._load_errors.extend(
-                    f"providers.json: {e}" for e in validate_providers_config(providers_config)
+                    f"providers.json: {e}"
+                    for e in validate_providers_config(providers_config)
                 )
             except json.JSONDecodeError as e:
                 self._load_errors.append(f"providers.json: invalid JSON — {e}")
@@ -223,13 +234,16 @@ class ProviderRegistry:
                 self._providers[provider_id] = provider
                 provider_ids.add(provider_id)
             else:
-                self._load_errors.append(f"provider '{provider_id}': unknown type '{config.get('type')}'")
+                self._load_errors.append(
+                    f"provider '{provider_id}': unknown type '{config.get('type')}'"
+                )
 
         if models_path.exists():
             try:
                 models_data = json.loads(models_path.read_text())
                 self._load_errors.extend(
-                    f"models.json: {e}" for e in validate_models_config(models_data, provider_ids)
+                    f"models.json: {e}"
+                    for e in validate_models_config(models_data, provider_ids)
                 )
                 for mid, cfg in models_data.get("models", {}).items():
                     if cfg.get("enabled") is False:
@@ -241,7 +255,9 @@ class ProviderRegistry:
         else:
             self._load_errors.append("models.json not found")
 
-    def _create_provider(self, provider_id: str, config: dict[str, Any]) -> ProviderBase | None:
+    def _create_provider(
+        self, provider_id: str, config: dict[str, Any]
+    ) -> ProviderBase | None:
         ptype = config.get("type", "")
         if ptype == "openai_compatible":
             return OpenAICompatibleProvider(provider_id, config)
@@ -263,7 +279,12 @@ class ProviderRegistry:
     def load_errors(self) -> list[str]:
         return list(self._load_errors)
 
-    def select_best_model(self, role: str, cost_policy: str = "balanced", prefer_strengths: list[str] | None = None) -> tuple[str, str, dict[str, Any]] | None:
+    def select_best_model(
+        self,
+        role: str,
+        cost_policy: str = "balanced",
+        prefer_strengths: list[str] | None = None,
+    ) -> tuple[str, str, dict[str, Any]] | None:
         candidates = self.get_models_for_role(role)
         if not candidates:
             return None
@@ -293,7 +314,9 @@ class ProviderRegistry:
             if role in roles:
                 provider_id = model_config.get("provider", "")
                 if provider_id in self._providers:
-                    candidates.append((provider_id, model_config["model"], model_config))
+                    candidates.append(
+                        (provider_id, model_config["model"], model_config)
+                    )
         return candidates
 
     def mark_unhealthy(

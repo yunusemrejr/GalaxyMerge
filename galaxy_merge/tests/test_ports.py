@@ -1,10 +1,8 @@
-
 import pytest
 
-pytestmark = [pytest.mark.unit]
-
-
 from galaxy_merge.app import ports
+
+pytestmark = [pytest.mark.unit]
 
 
 class FakeSocket:
@@ -36,7 +34,9 @@ class FakeSocket:
         return None
 
 
-def test_reserve_socket_with_port_zero_asks_os_for_ephemeral_port_first(monkeypatch) -> None:
+def test_reserve_socket_with_port_zero_asks_os_for_ephemeral_port_first(
+    monkeypatch,
+) -> None:
     # Given: socket creation is observable.
     attempts: list[int] = []
 
@@ -61,7 +61,9 @@ def test_reserve_socket_with_port_zero_asks_os_for_ephemeral_port_first(monkeypa
     assert sock.getsockname()[1] == 45678
 
 
-def test_reserve_socket_falls_back_to_legacy_range_when_ephemeral_bind_fails(monkeypatch) -> None:
+def test_reserve_socket_falls_back_to_legacy_range_when_ephemeral_bind_fails(
+    monkeypatch,
+) -> None:
     # Given: the OS ephemeral bind is unavailable.
     attempts: list[int] = []
 

@@ -2,7 +2,6 @@ import os
 import re
 import shlex
 from dataclasses import dataclass
-from pathlib import Path
 
 
 REMOTE_CLASSES = {
@@ -51,7 +50,9 @@ def first_remote_mutation(command: str) -> CommandInspection | None:
     try:
         tokens = split_tokens(command)
     except ValueError:
-        return CommandInspection("unknown", "unparseable shell command", "high", "", "", "")
+        return CommandInspection(
+            "unknown", "unparseable shell command", "high", "", "", ""
+        )
     return _inspect_tokens(tokens)
 
 
@@ -98,8 +99,17 @@ def _inspect_env(tokens: list[str]) -> CommandInspection | None:
         if token in OPERATORS:
             return _inspect_tokens(tokens[index + 1 :])
         if "=" in token and not token.startswith("-"):
-            if token.upper().startswith(("GIT_DIR=", "GIT_WORK_TREE=", "SSH_AUTH_SOCK=")):
-                return CommandInspection("git_remote", "environment can redirect git/ssh context", "high", "", "", "")
+            if token.upper().startswith(
+                ("GIT_DIR=", "GIT_WORK_TREE=", "SSH_AUTH_SOCK=")
+            ):
+                return CommandInspection(
+                    "git_remote",
+                    "environment can redirect git/ssh context",
+                    "high",
+                    "",
+                    "",
+                    "",
+                )
             index += 1
             continue
         return _inspect_tokens(tokens[index:])
@@ -115,13 +125,29 @@ def _inspect_shell_wrapper(tokens: list[str]) -> CommandInspection | None:
     return None
 
 
-def _inspect_command_at(tokens: list[str], index: int, command: str) -> CommandInspection | None:
+def _inspect_command_at(
+    tokens: list[str], index: int, command: str
+) -> CommandInspection | None:
     tail = tokens[index + 1 :]
     if command == "git" and "push" in tail:
-        return CommandInspection("git_remote", "git push targets a remote repository", "high", "", "", _git_repo_hint(tail))
+        return CommandInspection(
+            "git_remote",
+            "git push targets a remote repository",
+            "high",
+            "",
+            "",
+            _git_repo_hint(tail),
+        )
     if command in REMOTE_CLASSES:
         location_class = _remote_class_for(command, tail)
-        return CommandInspection(location_class, f"{command} targets a remote or deployment surface", "high", _host_hint(tail), _path_hint(tail), "")
+        return CommandInspection(
+            location_class,
+            f"{command} targets a remote or deployment surface",
+            "high",
+            _host_hint(tail),
+            _path_hint(tail),
+            "",
+        )
     return None
 
 

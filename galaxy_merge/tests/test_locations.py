@@ -1,13 +1,10 @@
-
-
 import pytest
 
-pytestmark = [pytest.mark.unit]
-from pathlib import Path
-
 from galaxy_merge.locations.classifier import LocationClassifier
-from galaxy_merge.locations.registry import LocationRegistry
 from galaxy_merge.locations.deployment_policy import DeploymentPolicy
+from galaxy_merge.locations.registry import LocationRegistry
+
+pytestmark = [pytest.mark.unit]
 
 
 class TestLocationClassifier:
@@ -45,9 +42,13 @@ class TestLocationClassifier:
         assert result["is_remote"] is False
 
     def test_install_dir_classification(self, tmp_path):
-        classifier = LocationClassifier(tmp_path / "project", tmp_path / "project" / ".gm", tmp_path / "project")
+        classifier = LocationClassifier(
+            tmp_path / "project", tmp_path / "project" / ".gm", tmp_path / "project"
+        )
         classifier.install_dir = tmp_path / "project"
-        result = classifier.classify(str(tmp_path / "project" / "galaxy_merge" / "__init__.py"))
+        result = classifier.classify(
+            str(tmp_path / "project" / "galaxy_merge" / "__init__.py")
+        )
         assert result["classification"] == "galaxy_merge_app_codebase"
 
 
@@ -64,7 +65,9 @@ class TestLocationRegistry:
         gm = tmp_path / ".gm"
         gm.mkdir(parents=True)
         registry = LocationRegistry(gm)
-        registry.register_remote("prod", "ftp_remote", "example.com", "/www", "production_target")
+        registry.register_remote(
+            "prod", "ftp_remote", "example.com", "/www", "production_target"
+        )
         d = registry.to_dict()
         assert len(d["remote_targets"]) == 1
         assert d["remote_targets"][0]["id"] == "prod"

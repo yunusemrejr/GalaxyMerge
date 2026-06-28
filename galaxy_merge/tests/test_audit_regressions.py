@@ -1,16 +1,19 @@
-
-
 import json
 from pathlib import Path
 
 import pytest
 
-pytestmark = [pytest.mark.integration]
-
-from galaxy_merge.app.server import SessionServer, _build_tree, build_logs_payload, build_notes_payload
+from galaxy_merge.app.server import (
+    SessionServer,
+    _build_tree,
+    build_logs_payload,
+)
+from galaxy_merge.app.payloads import build_notes_payload
 from galaxy_merge.core.session import Session, init_gm_dir
 from galaxy_merge.fusion.router import FusionRouter
 from galaxy_merge.providers.registry import ProviderRegistry, validate_routing_config
+
+pytestmark = [pytest.mark.integration]
 
 
 class TestAuditConfigRegressions:
@@ -33,28 +36,38 @@ class TestAuditConfigRegressions:
 
         assert council.get("roles")
 
-    def test_missing_env_key_marks_provider_unavailable(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_missing_env_key_marks_provider_unavailable(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         monkeypatch.delenv("GM_AUDIT_MISSING_KEY", raising=False)
-        (tmp_path / "providers.json").write_text(json.dumps({
-            "providers": {
-                "audit": {
-                    "enabled": True,
-                    "type": "openai_compatible",
-                    "base_url": "https://example.invalid/v1",
-                    "auth": {"type": "env", "env_var": "GM_AUDIT_MISSING_KEY"},
+        (tmp_path / "providers.json").write_text(
+            json.dumps(
+                {
+                    "providers": {
+                        "audit": {
+                            "enabled": True,
+                            "type": "openai_compatible",
+                            "base_url": "https://example.invalid/v1",
+                            "auth": {"type": "env", "env_var": "GM_AUDIT_MISSING_KEY"},
+                        }
+                    }
                 }
-            }
-        }))
-        (tmp_path / "models.json").write_text(json.dumps({
-            "models": {
-                "audit:model": {
-                    "provider": "audit",
-                    "model": "model",
-                    "enabled": True,
-                    "roles": ["planner"],
+            )
+        )
+        (tmp_path / "models.json").write_text(
+            json.dumps(
+                {
+                    "models": {
+                        "audit:model": {
+                            "provider": "audit",
+                            "model": "model",
+                            "enabled": True,
+                            "roles": ["planner"],
+                        }
+                    }
                 }
-            }
-        }))
+            )
+        )
 
         registry = ProviderRegistry(tmp_path)
         registry.load()
@@ -98,10 +111,14 @@ class TestAuditApiRegressions:
         assert len(data["notes"]) == 10
         assert data["truncated"] is True
 
-    def test_browser_open_is_visible_in_sessions(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_browser_open_is_visible_in_sessions(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
         from galaxy_merge.browser.manager import BrowserManager
 
-        def fake_open(self: BrowserManager, session_id: str, url: str = "about:blank") -> dict[str, object]:
+        def fake_open(
+            self: BrowserManager, session_id: str, url: str = "about:blank"
+        ) -> dict[str, object]:
             self._sessions[session_id] = {
                 "process": None,
                 "profile_dir": str(self.profile_path(session_id)),
@@ -117,7 +134,9 @@ class TestAuditApiRegressions:
         session.save_state()
         server = SessionServer(session, port=0)
 
-        opened = server._browser_manager.open_session(f"{session.session_id}:gui", "about:blank")
+        opened = server._browser_manager.open_session(
+            f"{session.session_id}:gui", "about:blank"
+        )
         sessions = []
         for item in server._browser_manager.list_sessions():
             if item["session_id"] == f"{session.session_id}:gui":
@@ -126,7 +145,9 @@ class TestAuditApiRegressions:
         assert opened["success"] is True
         assert sessions[0]["session_id"] == "gui"
 
-    def test_browser_logs_are_filtered_by_session_and_cdp_events_are_recorded(self, tmp_path: Path) -> None:
+    def test_browser_logs_are_filtered_by_session_and_cdp_events_are_recorded(
+        self, tmp_path: Path
+    ) -> None:
         from galaxy_merge.browser.cdp import CDPMonitor
         from galaxy_merge.browser.console_logs import ConsoleLogCollector
         from galaxy_merge.browser.network_logs import NetworkLogCollector
@@ -137,14 +158,21 @@ class TestAuditApiRegressions:
         network_b = NetworkLogCollector(tmp_path, "sess_b")
         monitor = CDPMonitor(0, console_a, network_a)
 
-        monitor._handle_event({
-            "method": "Runtime.consoleAPICalled",
-            "params": {"type": "error", "args": [{"value": "boom"}]},
-        })
-        monitor._handle_event({
-            "method": "Network.responseReceived",
-            "params": {"type": "Document", "response": {"url": "https://example.test", "status": 200}},
-        })
+        monitor._handle_event(
+            {
+                "method": "Runtime.consoleAPICalled",
+                "params": {"type": "error", "args": [{"value": "boom"}]},
+            }
+        )
+        monitor._handle_event(
+            {
+                "method": "Network.responseReceived",
+                "params": {
+                    "type": "Document",
+                    "response": {"url": "https://example.test", "status": 200},
+                },
+            }
+        )
 
         assert console_a.get_logs()[0]["message"] == "boom"
         assert console_b.get_logs() == []
@@ -154,7 +182,9 @@ class TestAuditApiRegressions:
 
 class TestAuditVerificationRegressions:
     @pytest.mark.asyncio
-    async def test_empty_fusion_plan_does_not_pass_verification(self, tmp_path: Path) -> None:
+    async def test_empty_fusion_plan_does_not_pass_verification(
+        self, tmp_path: Path
+    ) -> None:
         from galaxy_merge.core.orchestrator import Orchestrator
 
         init_gm_dir(tmp_path)

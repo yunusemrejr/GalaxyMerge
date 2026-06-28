@@ -8,24 +8,16 @@ safety.  No mocks; no shortcuts.
 Scenarios (1-10 from the spec) are all covered.
 """
 
-
-import pytest
-
-pytestmark = [pytest.mark.integration, pytest.mark.slow]
-
-
+import importlib
 import json
 import os
 import signal
 import subprocess
 import sys
-import tempfile
-import textwrap
 import threading
 import time
 from pathlib import Path
 
-import importlib
 import pytest
 
 from galaxy_merge.core.locks import (
@@ -46,13 +38,15 @@ from galaxy_merge.core.concurrency import (
 from galaxy_merge.core.session import (
     Session,
     init_gm_dir,
-    detect_workroot,
 )
+
+pytestmark = [pytest.mark.integration, pytest.mark.slow]
 
 
 # =============================================================================
 # Fixtures
 # =============================================================================
+
 
 @pytest.fixture
 def gm_dir(tmp_path: Path) -> Path:
@@ -69,8 +63,9 @@ def project_dir(tmp_path: Path) -> Path:
     return tmp_path
 
 
-def _session_script(workroot: str, session_id: str,
-                    actions: list[str], heartbeat: bool = True) -> str:
+def _session_script(
+    workroot: str, session_id: str, actions: list[str], heartbeat: bool = True
+) -> str:
     """Generate a Python script that runs in a subprocess to simulate a session.
 
     Each action is a line of Python code that has access to a `session`
@@ -80,37 +75,40 @@ def _session_script(workroot: str, session_id: str,
     _sid = f"'{session_id}'" if session_id else "None"
     _hb = "True" if heartbeat else "False"
     lines = [
-        'import sys, os, json, time',
-        f'sys.path.insert(0, {_GMROOT!r})',
-        f'os.chdir({workroot!r})',
-        'from galaxy_merge.core.session import Session, init_gm_dir',
-        'from galaxy_merge.core.concurrency import register_active_session, write_heartbeat, upgrade_concurrency',
-        'from pathlib import Path',
-        f'WR = Path({workroot!r})',
+        "import sys, os, json, time",
+        f"sys.path.insert(0, {_GMROOT!r})",
+        f"os.chdir({workroot!r})",
+        "from galaxy_merge.core.session import Session, init_gm_dir",
+        "from galaxy_merge.core.concurrency import register_active_session, write_heartbeat, upgrade_concurrency",
+        "from pathlib import Path",
+        f"WR = Path({workroot!r})",
         'gm_dir = WR / ".gm"',
-        'init_gm_dir(WR)',
-        'upgrade_concurrency(gm_dir)',
-        f'session = Session(WR, session_id={_sid})',
-        'session.save_state()',
-        'register_active_session(gm_dir, session.session_id)',
-        f'if {_hb}:',
-        '    write_heartbeat(gm_dir, session.session_id)',
+        "init_gm_dir(WR)",
+        "upgrade_concurrency(gm_dir)",
+        f"session = Session(WR, session_id={_sid})",
+        "session.save_state()",
+        "register_active_session(gm_dir, session.session_id)",
+        f"if {_hb}:",
+        "    write_heartbeat(gm_dir, session.session_id)",
     ]
     lines.extend(actions)
-    return '\n'.join(lines)
+    return "\n".join(lines)
 
 
 def _run_script(script: str, timeout: float = 15) -> subprocess.CompletedProcess:
     """Run a Python script in a subprocess and return the result."""
     return subprocess.run(
         [sys.executable, "-c", script],
-        capture_output=True, text=True, timeout=timeout,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
     )
 
 
 # =============================================================================
 # 1-3. Multiple sessions in the same project
 # =============================================================================
+
 
 class TestMultipleSessionsSameProject:
     """All three session instances must be isolated."""
@@ -119,10 +117,14 @@ class TestMultipleSessionsSameProject:
         """Three sessions in the same project → unique IDs."""
         wr = str(project_dir)
         scripts = [
-            _session_script(wr, None, [
-                "import json",
-                f"with open('/tmp/_gm_sess_{i}.txt', 'w') as f: f.write(session.session_id)",
-            ])
+            _session_script(
+                wr,
+                None,
+                [
+                    "import json",
+                    f"with open('/tmp/_gm_sess_{i}.txt', 'w') as f: f.write(session.session_id)",
+                ],
+            )
             for i in range(3)
         ]
         procs = [_run_script(s) for s in scripts]
@@ -133,17 +135,22 @@ class TestMultipleSessionsSameProject:
             p.unlink(missing_ok=True)
 
         assert len(set(ids)) == 3, f"session IDs were not unique: {ids}"
-        assert all(proc.returncode == 0 for proc in procs), \
+        assert all(proc.returncode == 0 for proc in procs), (
             f"proc errors: {[p.stderr for p in procs if p.returncode != 0]}"
+        )
 
     def test_session_dirs_are_isolated(self, project_dir: Path):
         """Each session gets its own .gm/sessions/<id>/ directory."""
         wr = str(project_dir)
         scripts = [
-            _session_script(wr, None, [
-                "import json",
-                f"with open('/tmp/_gm_sd_{i}.txt', 'w') as f: f.write(str(session.session_dir))",
-            ])
+            _session_script(
+                wr,
+                None,
+                [
+                    "import json",
+                    f"with open('/tmp/_gm_sd_{i}.txt', 'w') as f: f.write(str(session.session_dir))",
+                ],
+            )
             for i in range(3)
         ]
         procs = [_run_script(s) for s in scripts]
@@ -172,7 +179,9 @@ class TestMultipleSessionsSameProject:
         # Each session wrote to its own events.jsonl
         sessions_dir = project_dir / ".gm" / "sessions"
         event_files = list(sessions_dir.rglob("events.jsonl"))
-        assert len(event_files) >= 2, f"expected >=2 events.jsonl, got {len(event_files)}"
+        assert len(event_files) >= 2, (
+            f"expected >=2 events.jsonl, got {len(event_files)}"
+        )
 
     def test_goal_does_not_cross_sessions(self, project_dir: Path):
         """Setting a goal in one session must not affect another."""
@@ -194,7 +203,7 @@ class TestMultipleSessionsSameProject:
 
     def test_state_does_not_cross_sessions(self, project_dir: Path):
         """Session state (status, active) is isolated per session."""
-        actions1 = ['session.mark_completed()']
+        actions1 = ["session.mark_completed()"]
         actions2 = ['session._state["status"] = "running"; session.save_state()']
 
         s1 = _session_script(str(project_dir), "sess_c", actions1)
@@ -205,8 +214,12 @@ class TestMultipleSessionsSameProject:
         assert p2.returncode == 0, p2.stderr
 
         # sess_c is complete, sess_d is still running
-        sc = json.loads((project_dir / ".gm" / "sessions" / "sess_c" / "state.json").read_text())
-        sd = json.loads((project_dir / ".gm" / "sessions" / "sess_d" / "state.json").read_text())
+        sc = json.loads(
+            (project_dir / ".gm" / "sessions" / "sess_c" / "state.json").read_text()
+        )
+        sd = json.loads(
+            (project_dir / ".gm" / "sessions" / "sess_d" / "state.json").read_text()
+        )
         assert sc["status"] == "complete"
         assert sc["active"] is False
         assert sd["status"] == "running"
@@ -216,6 +229,7 @@ class TestMultipleSessionsSameProject:
 # =============================================================================
 # 4. Different projects
 # =============================================================================
+
 
 class TestDifferentProjects:
     """Sessions in different projects must be fully independent."""
@@ -240,6 +254,7 @@ class TestDifferentProjects:
 # =============================================================================
 # 5. Different goals touching different files
 # =============================================================================
+
 
 class TestDifferentGoalsDifferentFiles:
     """Concurrent sessions with different goals and file targets must not collide."""
@@ -274,8 +289,9 @@ class TestDifferentGoalsDifferentFiles:
         for t in threads:
             t.join(timeout=15)
 
-        assert all(r.returncode == 0 for r in results), \
-            [r.stderr for r in results if r.returncode != 0]
+        assert all(r.returncode == 0 for r in results), [
+            r.stderr for r in results if r.returncode != 0
+        ]
         assert (project_dir / "file_a.txt").read_text().strip() == "AAAA"
         assert (project_dir / "file_b.txt").read_text().strip() == "BBBB"
 
@@ -283,6 +299,7 @@ class TestDifferentGoalsDifferentFiles:
 # =============================================================================
 # 6. Same file conflict detection
 # =============================================================================
+
 
 class TestSameFileConflictDetection:
     """When two sessions touch the same file, we must detect conflict."""
@@ -313,16 +330,16 @@ class TestSameFileConflictDetection:
 
         wr = str(project_dir)
         actions_a = [
-            'import hashlib',
+            "import hashlib",
             'p = WR / "conflict_target.txt"',
-            'h_before = hashlib.sha256(p.read_bytes()).hexdigest()[:16]',
-            'time.sleep(0.2)',
-            'h_after = hashlib.sha256(p.read_bytes()).hexdigest()[:16]',
-            'conflict = h_before != h_after',
+            "h_before = hashlib.sha256(p.read_bytes()).hexdigest()[:16]",
+            "time.sleep(0.2)",
+            "h_after = hashlib.sha256(p.read_bytes()).hexdigest()[:16]",
+            "conflict = h_before != h_after",
             'open("/tmp/_gm_conflict_a.txt", "w").write(json.dumps({"conflict": conflict}))',
         ]
         actions_b = [
-            'time.sleep(0.1)',
+            "time.sleep(0.1)",
             '(WR / "conflict_target.txt").write_text("session_b_overwrote")',
             'open("/tmp/_gm_conflict_b.txt", "w").write("done")',
         ]
@@ -332,6 +349,7 @@ class TestSameFileConflictDetection:
 
         results: list[subprocess.CompletedProcess] = []
         threads = []
+
         def _run(s: str) -> None:
             results.append(_run_script(s, timeout=15))
 
@@ -363,7 +381,9 @@ class TestSameFileConflictDetection:
 
         target = project_dir / "shared_tool.txt"
         target.write_text("original")
-        tools = {schema.name: handler for schema, handler in make_file_tools(project_dir)}
+        tools = {
+            schema.name: handler for schema, handler in make_file_tools(project_dir)
+        }
 
         read_result = _run_async(tools["file.read"]("shared_tool.txt"))
         expected_hash = read_result.data["content_hash"]
@@ -387,7 +407,9 @@ class TestSameFileConflictDetection:
 
         target = project_dir / "patch_target.txt"
         target.write_text("alpha\n")
-        tools = {schema.name: handler for schema, handler in make_file_tools(project_dir)}
+        tools = {
+            schema.name: handler for schema, handler in make_file_tools(project_dir)
+        }
 
         read_result = _run_async(tools["file.read"]("patch_target.txt"))
         expected_hash = read_result.data["content_hash"]
@@ -410,6 +432,7 @@ class TestSameFileConflictDetection:
 # 7. Edit project notes in one GUI while another session runs
 # =============================================================================
 
+
 class TestNotesConcurrentAccess:
     """Notes editing must be safe under concurrent access."""
 
@@ -422,14 +445,22 @@ class TestNotesConcurrentAccess:
         # Simulate two concurrent index updates
         def writer_1() -> None:
             with FileLock(lock_path, timeout=10):
-                idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"notes": []}
+                idx = (
+                    json.loads(idx_path.read_text())
+                    if idx_path.exists()
+                    else {"notes": []}
+                )
                 idx["notes"].append({"id": "n1", "path": "a.md"})
                 time.sleep(0.1)
                 atomic_write(idx_path, json.dumps(idx), _nested_lock=True)
 
         def writer_2() -> None:
             with FileLock(lock_path, timeout=10):
-                idx = json.loads(idx_path.read_text()) if idx_path.exists() else {"notes": []}
+                idx = (
+                    json.loads(idx_path.read_text())
+                    if idx_path.exists()
+                    else {"notes": []}
+                )
                 idx["notes"].append({"id": "n2", "path": "b.md"})
                 time.sleep(0.1)
                 atomic_write(idx_path, json.dumps(idx), _nested_lock=True)
@@ -470,12 +501,14 @@ class TestNotesConcurrentAccess:
         # Both writers must have contributed
         assert "A" in text and "B" in text
         # Total lines should be 10 (5 each)
-        assert len(text.strip().splitlines()) == 10, \
+        assert len(text.strip().splitlines()) == 10, (
             f"expected 10 lines, got {len(text.strip().splitlines())}"
+        )
 
     def test_notes_tool_create_same_note_only_once(self, gm_dir: Path):
         """Two concurrent notes.create for the same name — second must fail."""
         from galaxy_merge.tools.notes_tools import make_notes_tools
+
         upgrade_concurrency(gm_dir.parent)
         tools = {s.name: h for s, h in make_notes_tools(gm_dir)}
 
@@ -499,18 +532,21 @@ class TestNotesConcurrentAccess:
 # 8. Trigger indexing in multiple sessions at once
 # =============================================================================
 
+
 class TestConcurrentIndexing:
     """Workspace indexing must be safe under concurrent access."""
 
     def test_concurrent_index_refresh(self, project_dir: Path):
         """Two indexers refreshing simultaneously — no corruption."""
         from galaxy_merge.workspace.indexer import WorkspaceIndexer
+
         upgrade_concurrency(project_dir / ".gm")
 
         idx1 = WorkspaceIndexer(project_dir)
         idx2 = WorkspaceIndexer(project_dir)
 
         results: list[dict] = []
+
         def refresh(idx: WorkspaceIndexer, label: str) -> None:
             r = idx.refresh()
             results.append(r)
@@ -531,6 +567,7 @@ class TestConcurrentIndexing:
     def test_incremental_update_safe(self, project_dir: Path):
         """Incremental updates from two sessions must not lose hashes."""
         from galaxy_merge.workspace.indexer import WorkspaceIndexer
+
         upgrade_concurrency(project_dir / ".gm")
 
         # Create files first
@@ -557,7 +594,9 @@ class TestConcurrentIndexing:
         t1.join()
         t2.join()
 
-        hashes = json.loads((project_dir / ".gm" / "indexes" / "file_hashes.json").read_text())
+        hashes = json.loads(
+            (project_dir / ".gm" / "indexes" / "file_hashes.json").read_text()
+        )
         assert "src/a.py" in hashes
         assert "src/b.py" in hashes
 
@@ -566,21 +605,29 @@ class TestConcurrentIndexing:
 # 9. Trigger cache writes in multiple sessions at once
 # =============================================================================
 
+
 class TestConcurrentCacheWrites:
     """Cache writes from concurrent sessions must not corrupt."""
 
     def test_cache_concurrent_sets(self, tmp_path: Path):
         """Multiple concurrent CacheStore.set calls — no data loss."""
         from galaxy_merge.cache.store import CacheStore
+
         upgrade_concurrency(tmp_path / ".gm")
         store = CacheStore(tmp_path / ".gm" / "cache" / "file_summaries")
 
         def writer(key_suffix: str) -> None:
             for i in range(10):
-                store.set(f"concurrent:{key_suffix}:{i}", f"value:{key_suffix}:{i}", ttl_seconds=600)
+                store.set(
+                    f"concurrent:{key_suffix}:{i}",
+                    f"value:{key_suffix}:{i}",
+                    ttl_seconds=600,
+                )
                 time.sleep(0.01)
 
-        threads = [threading.Thread(target=writer, args=(chr(ord("A") + i),)) for i in range(5)]
+        threads = [
+            threading.Thread(target=writer, args=(chr(ord("A") + i),)) for i in range(5)
+        ]
         for t in threads:
             t.start()
         for t in threads:
@@ -595,6 +642,7 @@ class TestConcurrentCacheWrites:
     def test_cache_read_write_race_safe(self, tmp_path: Path):
         """Concurrent read and write of same key must not return corrupt data."""
         from galaxy_merge.cache.store import CacheStore
+
         upgrade_concurrency(tmp_path / ".gm")
         store = CacheStore(tmp_path / ".gm" / "cache" / "test")
 
@@ -622,6 +670,7 @@ class TestConcurrentCacheWrites:
 # 10. Kill one terminal process while others continue
 # =============================================================================
 
+
 class TestCrashRecovery:
     """Killing a session must not break other sessions or corrupt state."""
 
@@ -631,7 +680,7 @@ class TestCrashRecovery:
 
         # Script for session that will be long-running and killed
         actions_kill = [
-            'time.sleep(300)  # will be killed',
+            "time.sleep(300)  # will be killed",
         ]
 
         # Script for survivor session
@@ -645,14 +694,16 @@ class TestCrashRecovery:
         # Start both
         kill_proc = subprocess.Popen(
             [sys.executable, "-c", kill_script],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
 
         time.sleep(0.5)  # Let it start
 
         survivor_proc = subprocess.Popen(
             [sys.executable, "-c", survivor_script],
-            stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.PIPE,
         )
         survivor_proc.wait(timeout=15)
         assert survivor_proc.returncode == 0, survivor_proc.stderr.read().decode()
@@ -675,7 +726,8 @@ class TestCrashRecovery:
 
     def test_cleanup_stale_sessions(self, project_dir: Path):
         """Stale session cleanup must remove old heartbeats and session dirs."""
-        from galaxy_merge.core.concurrency import cleanup_stale_sessions, register_active_session, write_heartbeat
+        from galaxy_merge.core.concurrency import register_active_session
+
         gm_dir = project_dir / ".gm"
 
         # Register sessions with old heartbeats (simulate stale)
@@ -703,7 +755,9 @@ class TestCrashRecovery:
         (fresh_dir / "state.json").write_text("{}")
 
         stale = cleanup_stale_sessions(gm_dir, max_age=60)
-        assert "stale_sess_1" in stale or "stale_sess_2" in stale, f"expected stale cleanup, got {stale}"
+        assert "stale_sess_1" in stale or "stale_sess_2" in stale, (
+            f"expected stale cleanup, got {stale}"
+        )
         assert not (gm_dir / "sessions" / "stale_sess_1").exists()
         assert not (gm_dir / "sessions" / "stale_sess_2").exists()
         assert (gm_dir / "sessions" / "fresh_sess").exists()  # survives
@@ -712,6 +766,7 @@ class TestCrashRecovery:
 # =============================================================================
 # Lock mechanism unit tests
 # =============================================================================
+
 
 class TestFileLock:
     """FileLock must provide mutual exclusion across threads and processes."""
@@ -723,8 +778,11 @@ class TestFileLock:
         def increment() -> None:
             for _ in range(100):
                 with FileLock(lock_path, timeout=10):
-                    current = int(shared_counter_path.read_text().strip() or "0") \
-                        if shared_counter_path.exists() else 0
+                    current = (
+                        int(shared_counter_path.read_text().strip() or "0")
+                        if shared_counter_path.exists()
+                        else 0
+                    )
                     time.sleep(0.001)
                     shared_counter_path.write_text(str(current + 1))
 
@@ -819,12 +877,14 @@ class TestLockManager:
 # Memory isolation under concurrency
 # =============================================================================
 
+
 class TestMemoryConcurrency:
     """Shared memory must not corrupt under concurrent writes."""
 
     def test_memory_store_concurrent_append(self, gm_dir: Path):
         """JSONL appends from multiple threads must not lose records."""
         from galaxy_merge.memory.store import MemoryStore
+
         upgrade_concurrency(gm_dir.parent)
         store = MemoryStore(gm_dir)
 
@@ -851,6 +911,7 @@ class TestMemoryConcurrency:
     def test_preferences_no_race(self, gm_dir: Path):
         """Concurrent set_preference must not lose keys."""
         from galaxy_merge.memory.store import MemoryStore
+
         upgrade_concurrency(gm_dir.parent)
         store = MemoryStore(gm_dir)
 
@@ -877,6 +938,7 @@ class TestMemoryConcurrency:
 # =============================================================================
 # Session registry
 # =============================================================================
+
 
 class TestSessionRegistry:
     """Session registry must maintain correct list of active sessions."""
@@ -905,6 +967,7 @@ class TestSessionRegistry:
 # Browser profile isolation
 # =============================================================================
 
+
 class TestBrowserProfileIsolation:
     """Browser automation profiles must be isolated by session ID."""
 
@@ -925,6 +988,7 @@ class TestBrowserProfileIsolation:
 # Full integration: concurrent gm sessions
 # =============================================================================
 
+
 class TestConcurrentSessionIntegration:
     """End-to-end concurrent session tests simulating real usage."""
 
@@ -934,26 +998,26 @@ class TestConcurrentSessionIntegration:
 
         actions_a = [
             'session.set_goal("Implement feature A")',
-            'from galaxy_merge.memory.project_memory import ProjectMemory',
+            "from galaxy_merge.memory.project_memory import ProjectMemory",
             'pm = ProjectMemory(WR / ".gm")',
             'pm.record_fact("Feature A started", source="test")',
             '(WR / "feature_a.txt").write_text("A implementation")',
-            'session.mark_completed()',
+            "session.mark_completed()",
         ]
         actions_b = [
             'session.set_goal("Implement feature B")',
-            'from galaxy_merge.memory.project_memory import ProjectMemory',
+            "from galaxy_merge.memory.project_memory import ProjectMemory",
             'pm = ProjectMemory(WR / ".gm")',
             'pm.record_fact("Feature B started", source="test")',
             '(WR / "feature_b.txt").write_text("B implementation")',
-            'session.mark_completed()',
+            "session.mark_completed()",
         ]
         actions_c = [
             'session.set_goal("Write docs")',
-            'from galaxy_merge.tools.notes_tools import make_notes_tools',
+            "from galaxy_merge.tools.notes_tools import make_notes_tools",
             'tools = {s.name: h for s, h in make_notes_tools(WR / ".gm")}',
             'import asyncio; asyncio.run(tools["notes.create"]("doc", "Documentation content", "Docs"))',
-            'session.mark_completed()',
+            "session.mark_completed()",
         ]
 
         scripts = [
@@ -964,6 +1028,7 @@ class TestConcurrentSessionIntegration:
 
         results: list[subprocess.CompletedProcess] = []
         threads = []
+
         def _run(s: str) -> None:
             results.append(_run_script(s, timeout=20))
 
@@ -985,12 +1050,20 @@ class TestConcurrentSessionIntegration:
         assert (project_dir / "feature_b.txt").read_text().strip() == "B implementation"
 
         # Verify note created
-        assert (project_dir / ".gm" / "notes" / "doc.md").read_text().strip() == "Documentation content"
+        assert (
+            project_dir / ".gm" / "notes" / "doc.md"
+        ).read_text().strip() == "Documentation content"
 
         # Verify all goals isolated
-        sa = json.loads((project_dir / ".gm" / "sessions" / "sess_int_a" / "state.json").read_text())
-        sb = json.loads((project_dir / ".gm" / "sessions" / "sess_int_b" / "state.json").read_text())
-        sc = json.loads((project_dir / ".gm" / "sessions" / "sess_int_c" / "state.json").read_text())
+        sa = json.loads(
+            (project_dir / ".gm" / "sessions" / "sess_int_a" / "state.json").read_text()
+        )
+        sb = json.loads(
+            (project_dir / ".gm" / "sessions" / "sess_int_b" / "state.json").read_text()
+        )
+        sc = json.loads(
+            (project_dir / ".gm" / "sessions" / "sess_int_c" / "state.json").read_text()
+        )
 
         assert sa["goal"] == "Implement feature A"
         assert sb["goal"] == "Implement feature B"
@@ -1016,12 +1089,21 @@ class TestConcurrentSessionIntegration:
             assert r.returncode == 0, r.stderr
 
         # Verify separate session logs
-        assert (project_dir / ".gm" / "sessions" / "agg_sess_a" / "events.jsonl").exists()
-        assert (project_dir / ".gm" / "sessions" / "agg_sess_b" / "events.jsonl").exists()
+        assert (
+            project_dir / ".gm" / "sessions" / "agg_sess_a" / "events.jsonl"
+        ).exists()
+        assert (
+            project_dir / ".gm" / "sessions" / "agg_sess_b" / "events.jsonl"
+        ).exists()
 
         # Both logs must be valid JSONL
         for sid in ["agg_sess_a", "agg_sess_b"]:
-            lines = (project_dir / ".gm" / "sessions" / sid / "events.jsonl").read_text().strip().splitlines()
+            lines = (
+                (project_dir / ".gm" / "sessions" / sid / "events.jsonl")
+                .read_text()
+                .strip()
+                .splitlines()
+            )
             assert len(lines) >= 1
             for line in lines:
                 rec = json.loads(line)
@@ -1033,23 +1115,24 @@ class TestConcurrentSessionIntegration:
 # Provider state isolation
 # =============================================================================
 
+
 class TestProviderStateIsolation:
     """Provider registry must be instantiable per-session without leakage."""
 
     @pytest.mark.skipif(
-        importlib.util.find_spec("httpx") is None,
-        reason="httpx not installed"
+        importlib.util.find_spec("httpx") is None, reason="httpx not installed"
     )
     def test_provider_registry_new_per_session(self, project_dir: Path):
         """ProviderRegistry instantiation must not share global state."""
         from galaxy_merge.providers.registry import ProviderRegistry
+
         init_gm_dir(project_dir)
 
         config_dir = project_dir / "config_templates"
         config_dir.mkdir(exist_ok=True)
-        (config_dir / "providers.json").write_text(json.dumps({
-            "providers": {"test": {"id": "test", "type": "mock"}}
-        }))
+        (config_dir / "providers.json").write_text(
+            json.dumps({"providers": {"test": {"id": "test", "type": "mock"}}})
+        )
 
         reg1 = ProviderRegistry(config_dir)
         reg2 = ProviderRegistry(config_dir)
@@ -1064,7 +1147,9 @@ class TestProviderStateIsolation:
 # Helper
 # =============================================================================
 
+
 def _run_async(coro):
     """Run a coroutine synchronously."""
     import asyncio
+
     return asyncio.run(coro)
