@@ -1,5 +1,6 @@
 import os
 import socket
+import subprocess
 import time
 from pathlib import Path
 from typing import Any
@@ -29,7 +30,6 @@ class BrowserManager:
         return self.cache_dir / "profiles" / session_id
 
     def open_session(self, session_id: str, url: str = "about:blank") -> dict[str, Any]:
-        import subprocess
         data_dir = self.profile_path(session_id)
         data_dir.mkdir(parents=True, exist_ok=True)
         debug_port = _find_free_port()
@@ -60,6 +60,13 @@ class BrowserManager:
             "--window-size=1280,800",
             url,
         ]
+        if os.environ.get("GM_BROWSER_HEADLESS") == "1" or not os.environ.get("DISPLAY"):
+            args.extend([
+                "--headless=new",
+                "--disable-gpu",
+                "--disable-dev-shm-usage",
+                "--no-sandbox",
+            ])
 
         try:
             process = subprocess.Popen(
@@ -74,6 +81,7 @@ class BrowserManager:
                 "data_dir": str(data_dir),
                 "url": url,
                 "started_at": time.time(),
+                "debug_port": debug_port,
             }
             console = ConsoleLogCollector(session_id, self.gm_dir)
             network = NetworkLogCollector(self.gm_dir, session_id)
@@ -210,30 +218,21 @@ class BrowserManager:
         if not session:
             return {"success": False, "error": "session not found"}
         try:
-            import subprocess
             proc = session.get("process")
             if not proc or proc.poll() is not None:
                 return {"success": False, "error": "browser process not running"}
-            ss_path = self._screenshot_mgr.get_screenshot_path(session_id)
-            ss_path.parent.mkdir(parents=True, exist_ok=True)
-            import shutil
-            if shutil.which("import"):
-                import subprocess as sp
-                result = sp.run(
-                    ["import", "-window", "root", str(ss_path)],
-                    capture_output=True, text=True, timeout=15,
-                )
-                if result.returncode == 0:
-                    return {"success": True, "screenshot_path": str(ss_path)}
-            if shutil.which("gnome-screenshot"):
-                import subprocess as sp
-                result = sp.run(
-                    ["gnome-screenshot", "-f", str(ss_path)],
-                    capture_output=True, text=True, timeout=15,
-                )
-                if result.returncode == 0:
-                    return {"success": True, "screenshot_path": str(ss_path)}
-            return {"success": False, "error": "no screenshot tool available (try: import, gnome-screenshot, or Playwright)"}
+            cdp_result = self._run_page_command(session_id, "Page.captureScreenshot", {
+                "format": "png",
+                "captureBeyondViewport": True,
+            })
+            image_data = (
+                cdp_result.get("response", {})
+                .get("result", {})
+                .get("data", "")
+            )
+            if cdp_result.get("success") and image_data:
+                return self._screenshot_mgr.save_cdp_capture(session_id, image_data)
+            return self._screenshot_mgr.capture_desktop(session_id)
         except Exception as e:
             return {"success": False, "error": str(e)}
 

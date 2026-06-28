@@ -1,6 +1,7 @@
 import asyncio
 import inspect
 import time
+from pathlib import Path
 from typing import Any, Callable, Coroutine
 
 from galaxy_merge.tools.schemas import ToolSchema, ToolResult
@@ -44,7 +45,7 @@ class ToolKernel:
         if schema.requires_safety and schema.mutates:
             target = params.get("path", params.get("target", ""))
             if target:
-                result = self.safety.check_path_write(target)
+                result = self.safety.check_path_write(self._safety_target(str(target)))
                 if result["decision"] == "block":
                     self._emit_event("tool_blocked", session_id=session_id, tool=name, reason=result['reason'])
                     return ToolResult(
@@ -77,3 +78,9 @@ class ToolKernel:
     def _emit_event(self, event: str, **kwargs: Any) -> None:
         if self._event_log:
             self._event_log.emit(event, **kwargs)
+
+    def _safety_target(self, target: str) -> str:
+        path = Path(target)
+        if path.is_absolute():
+            return str(path)
+        return str((self.safety.workroot / path).resolve())

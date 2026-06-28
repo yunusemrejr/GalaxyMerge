@@ -63,6 +63,37 @@ class TestToolKernel:
             assert "unknown tool" in result.error
 
     @pytest.mark.asyncio
+    async def test_relative_mutation_paths_are_checked_against_workroot(self, tmp_path, monkeypatch):
+        # Given: the process cwd is outside the WorkRoot.
+        from galaxy_merge.safety.governor import SafetyGovernor
+        from galaxy_merge.safety.audit import SafetyAudit
+        from galaxy_merge.tools.kernel import ToolKernel
+        from galaxy_merge.tools.file_tools import make_file_tools
+
+        workroot = tmp_path / "project"
+        outside = tmp_path / "outside"
+        workroot.mkdir()
+        outside.mkdir()
+        audit = SafetyAudit(workroot / ".gm" / "safety" / "audit.jsonl")
+        gov = SafetyGovernor(workroot, workroot / ".gm", audit)
+        kernel = ToolKernel(gov)
+        for schema, handler in make_file_tools(workroot):
+            kernel.register(schema, handler)
+        monkeypatch.chdir(outside)
+
+        # When: a relative path mutation is executed through the native kernel.
+        result = await kernel.execute("file.write", {
+            "path": "src/result.txt",
+            "content": "ok",
+            "expected_hash": "",
+        })
+
+        # Then: safety permits the WorkRoot-local target and the file is written there.
+        assert result.success is True
+        assert (workroot / "src" / "result.txt").read_text() == "ok"
+        assert not (outside / "src" / "result.txt").exists()
+
+    @pytest.mark.asyncio
     async def test_required_public_safety_tools_are_registered(self, tmp_path):
         # Given: an initialized orchestrator tool registry.
         from galaxy_merge.core.orchestrator import Orchestrator

@@ -1,6 +1,4 @@
-import pytest
-from pathlib import Path
-import tempfile
+import base64
 
 from galaxy_merge.browser.console_logs import ConsoleLogCollector
 from galaxy_merge.browser.network_logs import NetworkLogCollector
@@ -64,6 +62,37 @@ class TestDOMInspector:
 
 
 class TestBrowserManagerCommands:
+    def test_open_session_records_debug_port_and_headless_flags(self, monkeypatch, tmp_path):
+        # Given: Chrome exists and the harness is running without a display.
+        manager = BrowserManager(tmp_path)
+        started = {}
+
+        class FakeProcess:
+            pid = 1234
+
+            def poll(self):
+                return None
+
+        def fake_popen(args, **kwargs):
+            started["args"] = args
+            started["kwargs"] = kwargs
+            return FakeProcess()
+
+        monkeypatch.setattr(
+            "galaxy_merge.browser.manager.os.path.exists",
+            lambda path: path == "/usr/bin/google-chrome",
+        )
+        monkeypatch.setattr("galaxy_merge.browser.manager.subprocess.Popen", fake_popen)
+        monkeypatch.delenv("DISPLAY", raising=False)
+
+        # When: a browser session is opened.
+        opened = manager.open_session("sess_a", "http://127.0.0.1:8000")
+
+        # Then: DevTools state is persisted for later browser commands.
+        assert opened["success"] is True
+        assert manager._debug_port("sess_a") == opened["debug_port"]
+        assert "--headless=new" in started["args"]
+
     def test_navigate_reload_dom_snapshot_and_close_use_scoped_cdp(self, monkeypatch, tmp_path):
         # Given: an existing browser session with a DevTools port.
         manager = BrowserManager(tmp_path)
@@ -100,6 +129,41 @@ class TestBrowserManagerCommands:
         assert commands[0] == (9333, "Page.navigate", {"url": "https://example.test"})
         assert commands[1] == (9333, "Page.reload", {})
         assert commands[2][1] == "Runtime.evaluate"
+
+    def test_screenshot_uses_cdp_capture_when_available(self, monkeypatch, tmp_path):
+        # Given: an existing browser session with a DevTools port and a running process.
+        manager = BrowserManager(tmp_path)
+
+        class FakeProcess:
+            def poll(self):
+                return None
+
+        manager._sessions["sess_a"] = {
+            "process": FakeProcess(),
+            "profile_dir": str(manager.profile_path("sess_a")),
+            "data_dir": str(manager.profile_path("sess_a")),
+            "url": "about:blank",
+            "started_at": 1.0,
+            "debug_port": 9333,
+        }
+        png_bytes = b"\x89PNG\r\n\x1a\n"
+
+        def fake_send(port, method, params=None):
+            assert port == 9333
+            assert method == "Page.captureScreenshot"
+            return {"result": {"data": base64.b64encode(png_bytes).decode("ascii")}}
+
+        monkeypatch.setattr("galaxy_merge.browser.manager.send_page_command", fake_send)
+
+        # When: a screenshot is captured.
+        result = manager.screenshot("sess_a")
+
+        # Then: the PNG is written from CDP output.
+        assert result["success"] is True
+        assert result["source"] == "cdp"
+        screenshot_path = result["screenshot_path"]
+        assert tmp_path.joinpath("browser", "screenshots", "sess_a_page.png").read_bytes() == png_bytes
+        assert screenshot_path.endswith("sess_a_page.png")
 
 
 class TestBrowserTools:
