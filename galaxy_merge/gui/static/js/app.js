@@ -214,7 +214,7 @@
     container.scrollTop = container.scrollHeight;
   }
 
-  async   async function refreshCouncilStatus() {
+  async function refreshCouncilStatus() {
     try {
       const data = await API.getCouncil();
       const providers = data.providers || [];
