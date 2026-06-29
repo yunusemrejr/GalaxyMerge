@@ -26,6 +26,8 @@ acceptance_fixture/
 # Public GitHub guardrail: provider/config JSON may contain provider names,
 # endpoint URLs, routing details, env var names, or credentials. Keep them local.
 config/*.json
+config_templates/
+galaxy_merge/config_templates/
 galaxy_merge/config_templates/*.json
 galaxy_merge/config_templates/**/*.json
 acceptance_fixture/**/config_templates/*.json

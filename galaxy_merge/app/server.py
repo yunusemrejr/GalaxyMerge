@@ -92,14 +92,14 @@ class SessionServer:
 
         # --- Session & Project ---
         @app.get("/api/session")
-        def get_session():
+        async def get_session():
             data = self.session.to_dict()
             data["readonly_mode"] = self._is_readonly
             data["goal_state"] = data.get("status", "idle")
             return data
 
         @app.get("/api/project")
-        def get_project():
+        async def get_project():
             gm_dir = self.session.gm_dir
             project_json = gm_dir / "project.json"
             if project_json.exists():
@@ -112,7 +112,7 @@ class SessionServer:
             }
 
         @app.get("/api/sessions")
-        def get_active_sessions():
+        async def get_active_sessions():
             from galaxy_merge.app.payloads import _read_active_sessions
 
             sessions = _read_active_sessions(
@@ -125,7 +125,7 @@ class SessionServer:
 
         # --- File Tree & File Content ---
         @app.get("/api/tree")
-        def get_tree(path: str = "", max_entries: int = 500):
+        async def get_tree(path: str = "", max_entries: int = 500):
             base = self.session.workroot
             target = resolve_inside(base, path) if path else base
             if target is None:
@@ -137,7 +137,7 @@ class SessionServer:
         _api_cred_policy = CredentialPolicy(self.session.workroot)
 
         @app.get("/api/file")
-        def get_file(path: str):
+        async def get_file(path: str):
             target = resolve_inside(self.session.workroot, path)
             if target is None:
                 return JSONResponse(
@@ -230,7 +230,7 @@ class SessionServer:
 
         # --- Events & Logs ---
         @app.get("/api/events")
-        def get_events(
+        async def get_events(
             request: Request,
             limit: int = 500,
             offset: int = 0,
@@ -256,14 +256,14 @@ class SessionServer:
             return events
 
         @app.get("/api/logs")
-        def get_logs(limit: int = 500, offset: int = 0):
+        async def get_logs(limit: int = 500, offset: int = 0):
             return build_logs_payload(
                 self.session.gm_dir / "logs" / "project.log", limit, offset
             )
 
         # --- Council & Tools ---
         @app.get("/api/council")
-        def get_council():
+        async def get_council():
             if self._orchestrator:
                 policy = CredentialPolicy(self.session.workroot)
                 summary = build_council_event_summary(
@@ -285,7 +285,7 @@ class SessionServer:
             return {"tools": [], "providers": [], "roles": [], "degraded_roles": []}
 
         @app.get("/api/tools")
-        def get_tools():
+        async def get_tools():
             if self._orchestrator:
                 return {"tools": self._orchestrator.tool_kernel.list_tools()}
             return {"tools": []}
@@ -310,7 +310,7 @@ class SessionServer:
 
         # --- Browser ---
         @app.get("/api/browser/sessions")
-        def browser_sessions():
+        async def browser_sessions():
             sessions = []
             for session in self._browser_manager.list_sessions():
                 sid = session.get("session_id", "")
@@ -329,28 +329,28 @@ class SessionServer:
             return result
 
         @app.get("/api/browser/console")
-        def browser_console():
+        async def browser_console():
             collector = ConsoleLogCollector(
                 f"{self.session.session_id}:gui", self.session.gm_dir
             )
             return {"logs": collector.get_logs()}
 
         @app.get("/api/browser/network")
-        def browser_network():
+        async def browser_network():
             collector = NetworkLogCollector(
                 self.session.gm_dir, f"{self.session.session_id}:gui"
             )
             return {"logs": collector.get_logs()}
 
         @app.get("/api/browser/errors")
-        def browser_errors():
+        async def browser_errors():
             collector = PageErrorCollector(
                 self.session.gm_dir, f"{self.session.session_id}:gui"
             )
             return {"errors": collector.get_errors()}
 
         @app.get("/api/browser/screenshot")
-        def browser_screenshot(session_id: str = "gui"):
+        async def browser_screenshot(session_id: str = "gui"):
             target = self._browser_session_id(session_id)
             result = self._browser_manager.screenshot(target)
             if not result.get("success"):
@@ -374,7 +374,7 @@ class SessionServer:
 
         # --- Locations ---
         @app.get("/api/locations")
-        def get_locations():
+        async def get_locations():
             return build_locations_payload(
                 self.session.workroot, self.session.gm_dir, APP_INSTALL_DIR
             )
@@ -406,7 +406,7 @@ class SessionServer:
 
         # --- Safety ---
         @app.get("/api/safety")
-        def get_safety():
+        async def get_safety():
             from galaxy_merge.safety.command_policy import BLOCKED_COMMANDS
 
             blocked_actions = []
@@ -443,7 +443,7 @@ class SessionServer:
 
         # --- Health ---
         @app.get("/api/health")
-        def get_health():
+        async def get_health():
             from galaxy_merge.core.session import validate_gm_structure
 
             gm_validation = validate_gm_structure(self.session.gm_dir)

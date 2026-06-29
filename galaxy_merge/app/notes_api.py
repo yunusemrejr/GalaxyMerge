@@ -24,7 +24,7 @@ def register_notes_routes(app, session, get_orchestrator):
     """Register all notes-related routes on the FastAPI app."""
 
     @app.get("/api/notes")
-    def get_notes(limit: int = 100, offset: int = 0):
+    async def get_notes(limit: int = 100, offset: int = 0):
         note_usage = {}
         orchestrator = get_orchestrator()
         if orchestrator and orchestrator.memory_retriever:

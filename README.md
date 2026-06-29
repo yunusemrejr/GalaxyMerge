@@ -117,6 +117,9 @@ MINIMAX_API_KEY
 STREAMLAKE_API_KEY
 STEPFUN_API_KEY
 OPENROUTER_API_KEY
+NVIDIA_API_KEY
+KIMI_API_KEY
+OLLAMA_API_KEY
 GITHUB_TOKEN
 GH_TOKEN
 ```
@@ -136,6 +139,18 @@ Or create a `.env` file in your project (never commit it):
 cp ~/Desktop/Galaxymerge/.env.example .env
 # Edit .env with your keys
 ```
+
+### Importing OpenCode Provider Metadata
+
+Galaxy Merge can import provider/model metadata from an OpenCode provider export
+without copying API keys:
+
+```bash
+GALAXY_MERGE_OPENCODE_EXPORT=/path/to/opencode-provider-config-export.json gm
+```
+
+The importer writes only local ignored `providers.json` / `models.json` metadata
+and keeps auth as environment-variable references.
 
 ### Missing Keys
 
