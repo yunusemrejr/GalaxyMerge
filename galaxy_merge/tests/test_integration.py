@@ -6,11 +6,10 @@ from galaxy_merge.app.launcher import Launcher
 from galaxy_merge.app.server import (
     SessionServer,
     _build_tree,
-    build_council_event_summary,
     build_locations_payload,
     build_logs_payload,
 )
-from galaxy_merge.app.payloads import build_notes_payload
+from galaxy_merge.app.payloads import build_council_event_summary, build_notes_payload
 from galaxy_merge.core.session import Session, init_gm_dir
 
 pytestmark = [pytest.mark.integration]

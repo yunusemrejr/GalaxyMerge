@@ -21,9 +21,9 @@ from fastapi import FastAPI, Request, WebSocket, WebSocketDisconnect
 from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
+from galaxy_merge.app.council_api import register_council_routes
 from galaxy_merge.app.notes_api import register_notes_routes
 from galaxy_merge.app.payloads import (
-    build_council_event_summary,
     build_locations_payload,
     build_logs_payload,
     build_tree,
@@ -262,33 +262,9 @@ class SessionServer:
             )
 
         # --- Council & Tools ---
-        @app.get("/api/council")
-        async def get_council():
-            if self._orchestrator:
-                policy = CredentialPolicy(self.session.workroot)
-                summary = build_council_event_summary(
-                    self.session.event_log.replay(),
-                    self.session.workroot,
-                )
-                providers = _redact_nested(
-                    self._orchestrator.providers.available_providers(), policy
-                )
-                warnings = _redact_nested(
-                    self._orchestrator.providers.load_errors(), policy
-                )
-                return {
-                    "tools": self._orchestrator.tool_kernel.list_tools(),
-                    "providers": providers,
-                    "warnings": warnings,
-                    **summary,
-                }
-            return {"tools": [], "providers": [], "roles": [], "degraded_roles": []}
-
-        @app.get("/api/tools")
-        async def get_tools():
-            if self._orchestrator:
-                return {"tools": self._orchestrator.tool_kernel.list_tools()}
-            return {"tools": []}
+        register_council_routes(
+            app, self.session, self.config_dir, self._get_orchestrator
+        )
 
         # --- Notes (delegated to notes_api module) ---
         register_notes_routes(app, self.session, self._get_orchestrator)
@@ -530,13 +506,6 @@ class SessionServer:
                     self._ws_clients.remove(ws)
                 except ValueError:
                     pass
-
-        @app.on_event("startup")
-        async def on_startup():
-            # Keep startup lightweight and avoid blocking tests/environments where
-            # provider discovery may stall. The orchestrator is initialized lazily
-            # the first time goal execution is requested.
-            return None
 
         if STATIC_DIR.exists():
             app.mount(

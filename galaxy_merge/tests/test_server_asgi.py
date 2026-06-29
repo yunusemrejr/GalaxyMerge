@@ -84,3 +84,80 @@ async def test_resume_restores_crashed_session(tmp_path: Path) -> None:
         assert state["status"] == "running"
     finally:
         server._socket.close()
+
+
+@pytest.mark.asyncio
+async def test_council_lists_configured_providers_before_goal(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # Given: local provider configuration exists but no goal has started.
+    monkeypatch.delenv("GM_COUNCIL_MISSING_KEY", raising=False)
+    init_gm_dir(tmp_path)
+    config_dir = tmp_path / "config_templates"
+    config_dir.mkdir()
+    (config_dir / "providers.json").write_text(
+        json.dumps(
+            {
+                "providers": {
+                    "ready_mock": {
+                        "enabled": True,
+                        "type": "mock",
+                        "base_url": "http://mock",
+                        "auth": {"type": "none"},
+                    },
+                    "missing_key": {
+                        "enabled": True,
+                        "type": "openai_compatible",
+                        "base_url": "https://example.invalid/v1",
+                        "auth": {
+                            "type": "env",
+                            "env_var": "GM_COUNCIL_MISSING_KEY",
+                        },
+                    },
+                }
+            }
+        )
+    )
+    (config_dir / "models.json").write_text(
+        json.dumps(
+            {
+                "models": {
+                    "ready_mock:planner": {
+                        "provider": "ready_mock",
+                        "model": "mock-planner",
+                        "enabled": True,
+                        "roles": ["planner"],
+                    },
+                    "missing_key:reviewer": {
+                        "provider": "missing_key",
+                        "model": "reviewer",
+                        "enabled": True,
+                        "roles": ["reviewer"],
+                    },
+                }
+            }
+        )
+    )
+    session = Session(tmp_path)
+    session.save_state()
+    server = SessionServer(session, port=0)
+
+    try:
+        # When: the GUI asks for council status before creating an orchestrator.
+        response = await _request(server, "GET", "/api/council")
+
+        # Then: provider truth is visible instead of an empty placeholder.
+        assert response.status_code == 200
+        payload = response.json()
+        providers = {item["provider_id"]: item for item in payload["providers"]}
+        assert payload["tools"] == []
+        assert providers["ready_mock"]["available"] is True
+        assert providers["missing_key"]["available"] is False
+        assert (
+            providers["missing_key"]["warning"]
+            == "missing env var: GM_COUNCIL_MISSING_KEY"
+        )
+        assert payload["roles"] == []
+        assert payload["degraded_roles"] == []
+    finally:
+        server._socket.close()
