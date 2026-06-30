@@ -29,6 +29,7 @@
         const selectedSet = new Set(selectedSkills);
 
         const container = document.getElementById('skills-panel');
+        if (!container) return;
         const skills = skillsPayload.skills || [];
 
         let html = '<div class="memory-section">';

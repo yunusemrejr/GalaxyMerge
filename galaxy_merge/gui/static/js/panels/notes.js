@@ -27,6 +27,7 @@
         ]);
 
         const container = document.getElementById('notes-panel');
+        if (!container) return;
         const entries = trending.notes || [];
 
         let html = `<div class="note-search">
@@ -269,6 +270,7 @@
         if (!r.ok) return;
         const data = await r.json();
         const container = document.getElementById('notes-panel');
+        if (!container) return;
         const trashed = data.notes || [];
 
         if (trashed.length > 0) {

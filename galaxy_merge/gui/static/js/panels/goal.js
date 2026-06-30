@@ -21,9 +21,10 @@
 
   window.GoalPanel = {
     render(goal, phase, detail) {
-      document.getElementById('goal-phase').textContent = phase || 'idle';
+      const phaseEl = document.getElementById('goal-phase');
+      if (phaseEl) phaseEl.textContent = phase || 'idle';
       const detailEl = document.getElementById('goal-phase-detail');
-      if (detail) {
+      if (detailEl && detail) {
         detailEl.textContent = detail;
       }
     },
@@ -85,6 +86,7 @@
   window.PlanPanel = {
     render(plan) {
       const container = document.getElementById('plan-panel');
+      if (!container) return;
       if (!plan) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No plan yet</div>';
         return;
@@ -113,6 +115,7 @@
   window.DiffPanel = {
     render(diff) {
       const container = document.getElementById('diff-panel');
+      if (!container) return;
       if (!diff) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No diff available</div>';
         return;
@@ -124,6 +127,7 @@
   window.OutputPanel = {
     render(output) {
       const container = document.getElementById('output-panel');
+      if (!container) return;
       if (!output) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No output yet</div>';
         return;
@@ -137,6 +141,7 @@
       try {
         const events = await API.getEvents();
         const container = document.getElementById('verify-panel');
+        if (!container) return;
 
         const state = GoalPanel.getState();
         let html = '';

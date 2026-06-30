@@ -11,6 +11,7 @@
         const r = await fetch('/api/locations');
         const data = await r.json();
         const container = document.getElementById('locations-panel');
+        if (!container) return;
         
         let html = '';
         

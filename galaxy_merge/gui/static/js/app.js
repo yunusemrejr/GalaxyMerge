@@ -21,20 +21,24 @@
 
     if (GM.project && GM.project.readonly_mode) {
       addChat('system', 'READ-ONLY MODE: Operating inside Galaxy Merge codebase. Mutations disabled.');
-      document.getElementById('bar-safety').textContent = 'Safety: read-only';
+      const safetyBar = document.getElementById('bar-safety');
+      if (safetyBar) safetyBar.textContent = 'Safety: read-only';
     }
 
     const wsUrl = `ws://${location.host}/ws/session/${GM.session.session_id}`;
     connectWebSocket(wsUrl);
 
-    document.getElementById('goal-submit').addEventListener('click', submitGoal);
-    document.getElementById('goal-input').addEventListener('keydown', (e) => {
+    const goalSubmit = document.getElementById('goal-submit');
+    if (goalSubmit) goalSubmit.addEventListener('click', submitGoal);
+    const goalInput = document.getElementById('goal-input');
+    if (goalInput) goalInput.addEventListener('keydown', (e) => {
       if (e.key === 'Enter' && !e.shiftKey) {
         e.preventDefault();
         submitGoal();
       }
     });
-    document.getElementById('btn-refresh-tree').addEventListener('click', () => FilesPanel.refresh());
+    const btnRefresh = document.getElementById('btn-refresh-tree');
+    if (btnRefresh) btnRefresh.addEventListener('click', () => FilesPanel.refresh());
 
     document.querySelectorAll('.tab-btn').forEach(btn => {
       btn.addEventListener('click', () => switchTab(btn.dataset.tab));
@@ -275,9 +279,18 @@
       const providers = data.providers || [];
       const unavailable = providers.filter(p => !p.available);
       const providerBar = document.getElementById('bar-providers');
-      providerBar.textContent = `Providers: ${providers.length - unavailable.length}/${providers.length} available`;
+      if (providerBar) {
+        if (providers.length === 0) {
+          providerBar.textContent = 'Providers: not configured';
+          providerBar.style.color = 'var(--yellow)';
+        } else {
+          providerBar.textContent = `Providers: ${providers.length - unavailable.length}/${providers.length} available`;
+          if (unavailable.length) {
+            providerBar.style.color = 'var(--yellow)';
+          }
+        }
+      }
       if (unavailable.length) {
-        providerBar.style.color = 'var(--yellow)';
         unavailable.slice(0, 3).forEach(p => addChat('error', `${p.provider_id}: ${p.warning || 'unavailable'}`));
       }
       ToolsPanel.render(data.tools || []);
@@ -285,7 +298,8 @@
         CouncilPanel.refresh();
       }
     } catch (e) {
-      document.getElementById('bar-providers').textContent = 'Providers: unavailable';
+      const barEl = document.getElementById('bar-providers');
+      if (barEl) barEl.textContent = 'Providers: unavailable';
     }
   }
 
@@ -336,8 +350,13 @@
     return d.innerHTML;
   }
 
+  let _refreshInterval = null;
+
   function refreshAll() {
-    const interval = setInterval(() => {
+    if (_refreshInterval !== null) {
+      clearInterval(_refreshInterval);
+    }
+    _refreshInterval = window.setInterval(() => {
       FilesPanel.refresh();
       SafetyPanel.refresh();
       refreshCouncilStatus();

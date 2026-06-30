@@ -17,6 +17,7 @@
       try {
         const data = await API.get('/api/browser/sessions');
         const container = document.getElementById('browser-sessions');
+        if (!container) return;
         const sessions = data.sessions || [];
         if (sessions.length === 0) {
           container.innerHTML = '<div style="color:var(--fg2);padding:4px">No browser sessions</div>';
@@ -40,6 +41,7 @@
       try {
         const data = await API.getBrowserConsole();
         const container = document.getElementById('browser-console');
+        if (!container) return;
         const logs = data.logs || [];
         if (logs.length === 0) {
           container.innerHTML = '<div style="color:var(--fg2);padding:4px">No console logs</div>';
@@ -62,6 +64,7 @@
       try {
         const data = await API.getBrowserNetwork();
         const container = document.getElementById('browser-network');
+        if (!container) return;
         const logs = data.logs || [];
         if (logs.length === 0) {
           container.innerHTML = '<div style="color:var(--fg2);padding:4px">No network logs</div>';
@@ -82,6 +85,7 @@
     async refreshErrors() {
       try {
         const container = document.getElementById('browser-errors');
+        if (!container) return;
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">Page errors captured via CDP</div>';
       } catch (e) {
         console.error('browser errors refresh failed', e);

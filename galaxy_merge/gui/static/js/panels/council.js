@@ -22,6 +22,7 @@
 
     renderRoles(roles) {
       const container = document.getElementById('council-roles');
+      if (!container) return;
       if (!roles || roles.length === 0) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No council roles</div>';
         return;
@@ -47,6 +48,7 @@
 
     renderProviders(providers) {
       const container = document.getElementById('council-providers');
+      if (!container) return;
       if (!providers || providers.length === 0) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No providers configured</div>';
         return;
@@ -68,6 +70,7 @@
 
     renderFailures(failures, fallbacks) {
       const container = document.getElementById('council-failures');
+      if (!container) return;
       if ((!failures || failures.length === 0) && (!fallbacks || fallbacks.length === 0)) {
         container.innerHTML = '<div style="color:var(--fg2);padding:4px">No failures or fallbacks</div>';
         return;

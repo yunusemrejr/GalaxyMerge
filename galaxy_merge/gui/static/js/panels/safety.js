@@ -16,7 +16,7 @@
       try {
         const safety = await API.getSafety();
         const container = document.getElementById('safety-status');
-        if (!safety) return;
+        if (!safety || !container) return;
         
         let html = `<div class="safety-entry">
           <span style="color:var(--fg2)">Policy:</span> ${escapeHtml(safety.active_policy || 'default')}
@@ -37,25 +37,31 @@
         
         container.innerHTML = html;
         
-        document.getElementById('btn-secret-scan').addEventListener('click', async () => {
-          const resultEl = document.getElementById('secret-scan-result');
-          resultEl.textContent = 'Scanning...';
-          resultEl.style.color = 'var(--fg2)';
-          try {
-            const r = await fetch('/api/secret-scan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
-            const data = await r.json();
-            if (data.success) {
-              resultEl.textContent = 'Clean';
-              resultEl.style.color = 'var(--accent2)';
-            } else {
-              resultEl.textContent = data.error || 'Issues found';
-              resultEl.style.color = 'var(--red)';
+        const scanBtn = document.getElementById('btn-secret-scan');
+        if (scanBtn) {
+          scanBtn.addEventListener('click', async () => {
+            const resultEl = document.getElementById('secret-scan-result');
+            if (!resultEl) return;
+            resultEl.textContent = 'Scanning...';
+            resultEl.style.color = 'var(--fg2)';
+            try {
+              const r = await fetch('/api/secret-scan', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+              const data = await r.json();
+              if (data.success) {
+                resultEl.textContent = 'Clean';
+                resultEl.style.color = 'var(--accent2)';
+              } else {
+                resultEl.textContent = data.error || 'Issues found';
+                resultEl.style.color = 'var(--red)';
+              }
+            } catch (e) {
+              if (resultEl) {
+                resultEl.textContent = 'Scan failed';
+                resultEl.style.color = 'var(--red)';
+              }
             }
-          } catch (e) {
-            resultEl.textContent = 'Scan failed';
-            resultEl.style.color = 'var(--red)';
-          }
-        });
+          });
+        }
       } catch (e) {
         console.error('safety status refresh failed', e);
       }
@@ -65,6 +71,7 @@
       try {
         const safety = await API.getSafety();
         const container = document.getElementById('safety-blocked');
+        if (!container) return;
         const blocked = safety.blocked_commands || [];
         
         if (blocked.length === 0) {
@@ -88,6 +95,7 @@
       try {
         const events = await API.getEvents();
         const container = document.getElementById('safety-audit');
+        if (!container) return;
         const safetyEvents = events.filter(e => 
           e.event === 'tool_call_blocked' || 
           e.event === 'safety_event'

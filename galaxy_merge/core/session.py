@@ -238,7 +238,9 @@ def detect_workroot(path: Path) -> Path | None:
     current = path
     for _ in range(20):
         if _is_forbidden_root(current):
-            return None
+            # Hit a forbidden ancestor while walking up; stop traversing but
+            # let the final check decide based on the original path.
+            break
         for signal in signals:
             if (current / signal).exists():
                 if _is_forbidden_root(current):

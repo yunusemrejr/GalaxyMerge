@@ -10,6 +10,7 @@
   window.ToolsPanel = {
     render(tools) {
       const container = document.getElementById('tools-panel');
+      if (!container) return;
       let html = '<div class="memory-section">';
       html += '<div class="memory-section-header">Registered Tools</div>';
       if (!tools || tools.length === 0) {

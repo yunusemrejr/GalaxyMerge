@@ -93,8 +93,8 @@ async def test_council_lists_configured_providers_before_goal(
     # Given: local provider configuration exists but no goal has started.
     monkeypatch.delenv("GM_COUNCIL_MISSING_KEY", raising=False)
     init_gm_dir(tmp_path)
-    config_dir = tmp_path / "config_templates"
-    config_dir.mkdir()
+    config_dir = tmp_path / ".gm" / "config"
+    config_dir.mkdir(parents=True)
     (config_dir / "providers.json").write_text(
         json.dumps(
             {

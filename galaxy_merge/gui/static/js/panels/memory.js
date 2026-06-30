@@ -17,6 +17,7 @@
       try {
         const events = await API.getEvents();
         const container = document.getElementById('memory-panel');
+        if (!container) return;
         
         const sessionEvents = events.filter(e => 
           e.event === 'session_started' || 
@@ -51,6 +52,7 @@
       try {
         const payload = await API.getNotes();
         const container = document.getElementById('memory-panel');
+        if (!container) return;
         const entries = payload.notes || [];
         
         let html = '<div class="memory-section">';
@@ -77,6 +79,7 @@
       try {
         const data = await API.getMemory('all');
         const container = document.getElementById('memory-panel');
+        if (!container) return;
         const memory = data.memory || {};
         
         let html = '<div class="memory-section">';
@@ -106,6 +109,7 @@
       try {
         const data = await API.getSkills();
         const container = document.getElementById('memory-panel');
+        if (!container) return;
         const skills = data.skills || [];
         
         let html = '<div class="memory-section">';
