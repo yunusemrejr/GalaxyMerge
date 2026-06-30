@@ -9,6 +9,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "Look for obvious errors.",
             "Provide brief summary.",
             "Do not deep-dive — keep it fast.",
+            "MUST return a JSON object with 'findings' (array of objects) and 'syntax_ok' (boolean) — both are required.",
         ],
     },
     "planner": {
@@ -28,6 +29,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "Find relevant files and symbols.",
             "Summarize architecture.",
             "Report uncertainty.",
+            "MUST return a JSON object with 'files_found' (array of file path strings) — this field is required.",
         ],
     },
     "implementer": {
@@ -46,6 +48,7 @@ ROLE_DEFINITIONS: dict[str, dict[str, Any]] = {
             "Look for regressions.",
             "Check edge cases.",
             "Challenge assumptions.",
+            "MUST return a JSON object with 'findings' (array of finding objects) and 'approved' (boolean) — both are required.",
         ],
     },
     "skeptic": {

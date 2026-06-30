@@ -30,7 +30,7 @@ def validate_schema(role: str, parsed: dict[str, Any]) -> list[str]:
         return []
     required = schema.get("required", [])
     for field in required:
-        if field not in parsed or not parsed.get(field):
+        if field not in parsed:
             errors.append(f"missing required field: {field}")
     return errors
 
