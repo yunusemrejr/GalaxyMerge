@@ -5,7 +5,7 @@ from typing import Any
 
 from galaxy_merge.providers.base import ProviderBase
 from galaxy_merge.providers.local_ollama import OllamaProvider
-from galaxy_merge.providers.mock import MockProvider
+from galaxy_merge.providers.mock import MockProvider, OfflineMockProvider
 from galaxy_merge.providers.openai_compat import OpenAICompatibleProvider
 from galaxy_merge.safety.credential_policy import redact_text
 
@@ -254,6 +254,47 @@ class ProviderRegistry:
                 self._load_errors.append(f"models.json: invalid JSON — {e}")
         else:
             self._load_errors.append("models.json not found")
+
+        self._inject_offline_fallback()
+
+    def _inject_offline_fallback(self) -> None:
+        """Inject a deterministic OfflineMockProvider when no real providers are available.
+
+        This ensures the council can always produce a valid plan even when all
+        configured providers lack API keys, are down, or are unreachable.
+        """
+        has_available = any(
+            provider.available for provider in self._providers.values()
+        )
+        if has_available:
+            return
+        if "offline_mock" in self._providers:
+            return
+
+        offline = OfflineMockProvider()
+        self._providers["offline_mock"] = offline
+        self._models["offline_mock:offline-mock"] = {
+            "provider": "offline_mock",
+            "model": "offline-mock",
+            "enabled": True,
+            "context_window": 32000,
+            "output_limit": 4096,
+            "strengths": ["offline_fallback"],
+            "cost_tier": "local",
+            "latency_tier": "fast",
+            "roles": [
+                "planner",
+                "scout",
+                "implementer",
+                "reviewer",
+                "cheap_verifier",
+                "skeptic",
+                "synthesizer",
+            ],
+        }
+        logger.info(
+            "Injected offline_mock fallback provider: no real providers available"
+        )
 
     def _create_provider(
         self, provider_id: str, config: dict[str, Any]

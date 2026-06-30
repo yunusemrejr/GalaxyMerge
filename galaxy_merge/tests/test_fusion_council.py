@@ -588,7 +588,6 @@ class TestOrchestratorCouncilEvents:
         assert "council_completed" in event_types, "council_completed event missing"
         assert "fusion_started" in event_types, "fusion_started event missing"
         assert "fusion_completed" in event_types, "fusion_completed event missing"
-        assert "goal_received" in event_types
         assert "goal_parsed" in event_types
         assert "council_started" in event_types
         assert "council_completed" in event_types

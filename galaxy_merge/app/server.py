@@ -11,6 +11,7 @@ GUI serving. Business logic is delegated to focused modules:
 import asyncio
 import json
 import os
+import shutil
 from base64 import b64encode
 from datetime import datetime, timezone
 from pathlib import Path
@@ -52,11 +53,12 @@ class SessionServer:
         self.session = session
         self._socket = reserve_socket(port)
         self.port = self._socket.getsockname()[1]
-        self.config_dir = session.gm_dir.parent / "config_templates"
-        if not self.config_dir.exists():
-            self.config_dir = (
-                Path(__file__).resolve().parent.parent / "config_templates"
-            )
+        # Use project-local config under .gm/config/ so the install templates
+        # stay read-only. Templates are copied on first run only.
+        self.config_dir = session.gm_dir / "config"
+        install_templates = Path(__file__).resolve().parent.parent / "config_templates"
+        self._ensure_project_config(self.config_dir, install_templates)
+        self.install_config_dir = install_templates
         self._is_readonly = self._check_launch_inside_codebase()
         self.app = self._build_app()
         self._ws_clients: list[WebSocket] = []
@@ -76,6 +78,20 @@ class SessionServer:
         except Exception:
             pass
         return False
+
+    def _ensure_project_config(self, target: Path, source: Path) -> None:
+        """Copy missing template config files from the install directory into the
+        project-local .gm/config/ directory. Existing files are never overwritten
+        so user customizations persist across runs."""
+        target.mkdir(parents=True, exist_ok=True)
+        for name in ("providers.json", "models.json", "fusion.json", "routing.json", "safety.json"):
+            src = source / name
+            dst = target / name
+            if src.exists() and not dst.exists():
+                try:
+                    shutil.copy2(src, dst)
+                except OSError:
+                    pass
 
     def _browser_session_id(self, label: str = "gui") -> str:
         if label in ("gui", ""):

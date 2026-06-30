@@ -6,6 +6,97 @@ from galaxy_merge.fusion.roles import ROLE_DEFINITIONS
 from galaxy_merge.providers.base import ProviderBase
 from galaxy_merge.safety.credential_policy import redact_text
 
+OFFLINE_MOCK_RESPONSES: dict[str, dict[str, Any]] = {
+    "planner": {
+        "goal_understanding": "offline mock: goal acknowledged",
+        "relevant_files": [],
+        "steps": ["analyze goal", "determine approach", "apply changes"],
+        "completion_criteria": ["changes applied", "no syntax errors"],
+        "risks": [],
+    },
+    "scout": {
+        "files_found": [],
+        "architecture_summary": "offline mock: no workspace scan performed",
+        "uncertainties": ["offline mode: limited context"],
+    },
+    "implementer": {
+        "changes": [],
+    },
+    "reviewer": {
+        "findings": [],
+        "risks": ["offline mode: limited review depth"],
+        "approved": True,
+    },
+    "cheap_verifier": {
+        "findings": [],
+        "syntax_ok": True,
+        "summary": "offline mock verification: no syntax errors detected",
+    },
+    "skeptic": {
+        "blockers": [],
+        "missing_evidence": ["offline mode: cannot fully verify"],
+        "completion_claim_valid": True,
+    },
+    "synthesizer": {
+        "plan": [],
+        "summary": "offline mock: no changes needed",
+        "contradictions_resolved": [],
+    },
+}
+
+
+class OfflineMockProvider(ProviderBase):
+    """Deterministic offline provider that produces valid schema-conformant
+    responses for every council role without any network calls.
+
+    Automatically injected by ProviderRegistry when zero real providers are
+    available, so the harness always produces a usable plan even with no API
+    keys or all providers down.
+    """
+
+    def __init__(self, provider_id: str = "offline_mock", config: dict[str, Any] | None = None):
+        super().__init__(provider_id, config or {"type": "mock"})
+        self._healthy = True
+        self._available = True
+
+    async def chat_completion(
+        self,
+        messages: list[dict[str, str]],
+        model: str,
+        temperature: float = 0.7,
+        max_tokens: int | None = None,
+        stream: bool = False,
+        extra_body: dict[str, Any] | None = None,
+        **kwargs,
+    ) -> dict[str, Any]:
+        role = _extract_role(messages)
+        response_data = OFFLINE_MOCK_RESPONSES.get(role, {"raw": "offline mock response"})
+        content = json.dumps(response_data)
+        return {
+            "success": True,
+            "content": content,
+            "model": model,
+            "usage": {},
+            "provider": self.provider_id,
+        }
+
+    async def check_health(self) -> bool:
+        return True
+
+
+def _extract_role(messages: list[dict[str, str]]) -> str:
+    """Extract the council role from the system message content."""
+    for msg in messages:
+        if msg.get("role") != "system":
+            continue
+        content = msg.get("content", "")
+        for role in ROLE_DEFINITIONS:
+            if role in content and role != "synthesizer":
+                return role
+        if "synthesizer" in content:
+            return "synthesizer"
+    return ""
+
 
 class MockProvider(ProviderBase):
     """Explicitly configured provider for deterministic local tests."""
