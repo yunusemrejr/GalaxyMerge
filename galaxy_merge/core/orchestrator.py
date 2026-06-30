@@ -198,9 +198,6 @@ class Orchestrator:
         self.memory_retriever.clear_for_new_goal()
         self.session.set_goal(goal)
         self.session_memory.add_entry("goal", goal)
-        self.event_log.emit(
-            "goal_received", session_id=self.session.session_id, goal=goal
-        )
 
         parsed = self.goal_engine.parse(goal)
         self.session._state["status"] = "understanding"
@@ -396,18 +393,6 @@ class Orchestrator:
         self.project_memory.record_fact(
             f"completed goal: {goal[:100]}", source="session"
         )
-
-    async def _run_planning(
-        self,
-        task_type: str,
-        goal: str,
-        memory: dict[str, Any],
-        workspace: dict[str, Any],
-    ) -> dict[str, Any]:
-        return {"task_type": task_type, "goal": goal, "workspace": workspace}
-
-    async def _run_scout(self, plan: dict[str, Any]) -> dict[str, Any]:
-        return {"status": "skipped"}
 
     async def _verify(self, fused: dict[str, Any]) -> dict[str, Any]:
         issues = []

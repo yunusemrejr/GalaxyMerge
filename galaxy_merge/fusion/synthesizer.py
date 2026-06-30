@@ -284,16 +284,36 @@ class Synthesizer:
             matching_changes = [c for c in changes if c.get("file") == fp]
             if matching_changes:
                 for c in matching_changes:
-                    plan.append(
-                        {
-                            "tool": "file.write",
-                            "params": {
-                                "path": c.get("file", ""),
-                                "content": c.get("diff", ""),
-                            },
-                            "rationale": c.get("rationale", ""),
-                        }
-                    )
+                    action = c.get("action", "edit")
+                    diff_content = c.get("diff", "")
+                    if action == "delete":
+                        plan.append(
+                            {
+                                "tool": "file.delete",
+                                "params": {"path": c.get("file", "")},
+                                "rationale": c.get("rationale", ""),
+                            }
+                        )
+                    elif diff_content and action in ("edit", "create"):
+                        plan.append(
+                            {
+                                "tool": "file.write",
+                                "params": {
+                                    "path": c.get("file", ""),
+                                    "content": diff_content,
+                                },
+                                "rationale": c.get("rationale", ""),
+                            }
+                        )
+                    else:
+                        plan.append(
+                            {
+                                "tool": "file.read",
+                                "params": {"path": c.get("file", "")},
+                                "rationale": c.get("rationale", "")
+                                or "inspect file for changes",
+                            }
+                        )
             else:
                 plan.append(
                     {

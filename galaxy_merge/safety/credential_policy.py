@@ -5,7 +5,6 @@ from typing import Any
 SENSITIVE_PATTERNS: list[str] = [
     r"api_key\s*[:=]\s*['\"][^'\"]+['\"]",
     r"api_token\s*[:=]\s*['\"][^'\"]+['\"]",
-    r"sk-[a-zA-Z0-9]{20,}",
     r"sk-[a-zA-Z0-9]{20,}(?:[^a-zA-Z0-9]|$)",
     r"AKIA[0-9A-Z]{16}",
     r"ghp_[a-zA-Z0-9]{36}",
