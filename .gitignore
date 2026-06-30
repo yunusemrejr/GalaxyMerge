@@ -54,3 +54,5 @@ acceptance_fixture/**/config_templates/**/*.json
 htmlcov/
 .pyright/
 .basedpyright/
+*.lock
+!uv.lock

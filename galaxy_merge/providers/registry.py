@@ -201,7 +201,7 @@ class ProviderRegistry:
         has_mock = any(v.get("type") == "mock" for v in existing_providers.values())
 
         if not existing_providers and not has_mock:
-            from galaxy_merge.core.config import import_opencode_providers
+            from galaxy_merge.core.opencode_import import import_opencode_providers
 
             import_opencode_providers(self.config_dir)
 
@@ -231,7 +231,16 @@ class ProviderRegistry:
         for provider_id, config in providers_config.get("providers", {}).items():
             if not config.get("enabled", True):
                 continue
-            provider = self._create_provider(provider_id, config)
+            try:
+                provider = self._create_provider(provider_id, config)
+            except Exception as exc:
+                self._load_errors.append(
+                    f"provider '{provider_id}': failed to create — {exc}"
+                )
+                logger.warning(
+                    "Provider '%s' creation failed: %s", provider_id, exc
+                )
+                continue
             if provider:
                 self._providers[provider_id] = provider
                 provider_ids.add(provider_id)
@@ -239,8 +248,8 @@ class ProviderRegistry:
                     available_count += 1
                 else:
                     unavailable_count += 1
-                    logger.warning(
-                        "Provider '%s' unavailable: %s",
+                    logger.info(
+                        "Provider '%s' not available: %s",
                         provider_id,
                         provider.warning or "no reason given",
                     )

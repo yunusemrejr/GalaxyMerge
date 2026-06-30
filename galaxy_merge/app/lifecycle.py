@@ -1,3 +1,4 @@
+import importlib
 import os
 import sys
 import platform
@@ -119,7 +120,7 @@ def run_doctor() -> int:
     for pkg in required:
         try:
             import_name = _IMPORT_NAMES.get(pkg, pkg)
-            mod = __import__(import_name)
+            mod = importlib.import_module(import_name)
             ver = getattr(mod, "__version__", "?")
             _check(pkg, True, ver)
         except ImportError:
@@ -134,7 +135,7 @@ def run_doctor() -> int:
     for pkg in optional:
         try:
             import_name = _IMPORT_NAMES.get(pkg, pkg)
-            mod = __import__(import_name)
+            mod = importlib.import_module(import_name)
             ver = getattr(mod, "__version__", "?")
             _check(pkg, True, ver)
         except ImportError:

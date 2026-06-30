@@ -226,7 +226,8 @@ def _ensure_dict(data: dict[str, object], key: str) -> dict[str, object]:
     if isinstance(value, dict):
         return value
     data[key] = {}
-    return data[key]
+    result = data[key]
+    return result if isinstance(result, dict) else {}
 
 
 def _dict_value(data: dict[str, object], key: str) -> dict[str, object]:

@@ -18,7 +18,7 @@ def _file_hash(path: Path) -> str:
 
 
 def make_file_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
-    tools = []
+    tools: list[tuple[ToolSchema, Any]] = []
 
     async def file_read(
         path: str, offset: int = 0, limit: int | None = None

@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -7,6 +8,8 @@ from galaxy_merge.core.events import EventLog
 from galaxy_merge.core.locks import atomic_append, atomic_write
 from galaxy_merge.memory.store import MemoryStore
 from galaxy_merge.safety.credential_policy import CredentialPolicy
+
+logger = logging.getLogger("galaxy_merge.memory.compaction")
 
 COMPACTION_THRESHOLD_EVENTS = 500
 COMPACTION_THRESHOLD_TOOL_CALLS = 100
@@ -178,7 +181,7 @@ class Compactor:
                     "completion_criteria", parsed.get("completion_criteria", "")
                 )
             except Exception:
-                pass
+                logger.debug("Goal data parse failed during compaction", exc_info=True)
 
         compacted.append(f"Active goal: {active_goal or 'none'}")
         compacted.append(f"TaskScope: {task_scope}")

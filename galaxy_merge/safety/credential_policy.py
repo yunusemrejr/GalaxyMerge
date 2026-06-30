@@ -19,6 +19,17 @@ SENSITIVE_PATTERNS: list[str] = [
     r"access_key_id\s*[:=]\s*['\"][^'\"]+['\"]",
     r"secret_access_key\s*[:=]\s*['\"][^'\"]+['\"]",
     r"eyJ[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}\.[a-zA-Z0-9_-]{10,}",
+    r"sk_live_[a-zA-Z0-9]{24,}",
+    r"sk_test_[a-zA-Z0-9]{24,}",
+    r"rk_live_[a-zA-Z0-9]{24,}",
+    r"rk_test_[a-zA-Z0-9]{24,}",
+    r"SG\.[a-zA-Z0-9_-]{22}\.[a-zA-Z0-9_-]{43}",
+    r"xox[bpsar]-[a-zA-Z0-9-]+",
+    r"xoxa-[a-zA-Z0-9-]+",
+    r"https://hooks\.slack\.com/services/[A-Z0-9]+/[A-Z0-9]+/[a-zA-Z0-9]+",
+    r"pypi-[a-zA-Z0-9]{60,}",
+    r"AC[a-f0-9]{32}",
+    r"[a-f0-9]{32}@project\.appspot\.com",
 ]
 
 SENSITIVE_PATH_PARTS: list[str] = [
@@ -47,6 +58,15 @@ SENSITIVE_PATH_PARTS: list[str] = [
     ".netrc",
     ".gitconfig",
     "service-account-key",
+    "kubeconfig",
+    ".kube/config",
+    ".azure/",
+    "*.p12",
+    "*.pfx",
+    "htpasswd",
+    "shadow",
+    ".vault-token",
+    ".terraform.rc",
 ]
 
 ENV_VAR_PATTERN = re.compile(
@@ -54,7 +74,11 @@ ENV_VAR_PATTERN = re.compile(
     r"DEEPSEEK_API_KEY|OPENROUTER_API_KEY|NVIDIA_API_KEY|OLLAMA_API_KEY|"
     r"MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|"
     r"GITHUB_TOKEN|GH_TOKEN|AWS_SECRET_ACCESS_KEY|AWS_ACCESS_KEY_ID|"
-    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)\}?"
+    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN|"
+    r"AZURE_CLIENT_SECRET|AZURE_TENANT_ID|GOOGLE_APPLICATION_CREDENTIALS|"
+    r"FIREBASE_TOKEN|NPM_TOKEN|PYPI_TOKEN|SLACK_TOKEN|"
+    r"STRIPE_SECRET_KEY|STRIPE_PUBLISHABLE_KEY|"
+    r"SENDGRID_API_KEY|TWILIO_AUTH_TOKEN|TWILIO_ACCOUNT_SID)\}?"
 )
 
 # Also catch bare env-var-style assignments like OPENAI_API_KEY=sk-...
@@ -63,7 +87,11 @@ ENV_ASSIGN_PATTERN = re.compile(
     r"DEEPSEEK_API_KEY|OPENROUTER_API_KEY|NVIDIA_API_KEY|OLLAMA_API_KEY|"
     r"MINIMAX_API_KEY|STEPFUN_API_KEY|STREAMLAKE_API_KEY|KIMI_API_KEY|"
     r"GITHUB_TOKEN|GH_TOKEN|AWS_ACCESS_KEY_ID|AWS_SECRET_ACCESS_KEY|"
-    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN)"
+    r"DIGITALOCEAN_TOKEN|HUGGINGFACE_TOKEN|REPLICATE_API_TOKEN|"
+    r"AZURE_CLIENT_SECRET|AZURE_TENANT_ID|GOOGLE_APPLICATION_CREDENTIALS|"
+    r"FIREBASE_TOKEN|NPM_TOKEN|PYPI_TOKEN|SLACK_TOKEN|"
+    r"STRIPE_SECRET_KEY|STRIPE_PUBLISHABLE_KEY|"
+    r"SENDGRID_API_KEY|TWILIO_AUTH_TOKEN|TWILIO_ACCOUNT_SID)"
     r"\s*=\s*\S+"
 )
 
@@ -84,6 +112,18 @@ ENV_NAME_MAP = {
     "GH_TOKEN": "ghp_...",
     "AWS_SECRET_ACCESS_KEY": "AKIA...",
     "AWS_ACCESS_KEY_ID": "AKIA...",
+    "AZURE_CLIENT_SECRET": "***...",
+    "AZURE_TENANT_ID": "***...",
+    "GOOGLE_APPLICATION_CREDENTIALS": "path/to/sa.json",
+    "FIREBASE_TOKEN": "***...",
+    "NPM_TOKEN": "npm_...",
+    "PYPI_TOKEN": "pypi-...",
+    "SLACK_TOKEN": "xoxb-...",
+    "STRIPE_SECRET_KEY": "sk_live_...",
+    "STRIPE_PUBLISHABLE_KEY": "pk_live_...",
+    "SENDGRID_API_KEY": "SG....",
+    "TWILIO_AUTH_TOKEN": "***...",
+    "TWILIO_ACCOUNT_SID": "AC...",
 }
 
 

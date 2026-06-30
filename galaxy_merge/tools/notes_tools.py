@@ -276,7 +276,7 @@ def make_notes_tools(gm_dir: Path) -> list[tuple[ToolSchema, Any]]:
 
             if matched:
                 idx = _get_index(notes_dir)
-                meta = next(
+                meta: dict[str, Any] = next(
                     (n for n in idx.get("notes", []) if n.get("path") == f.name), {}
                 )
                 results.append(

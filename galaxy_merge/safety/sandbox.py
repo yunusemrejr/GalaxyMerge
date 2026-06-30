@@ -19,10 +19,6 @@ class Sandbox:
         timeout_seconds: int = 60,
         env: dict[str, str] | None = None,
     ) -> dict[str, Any]:
-        import re
-
-        re.compile(r"[;|&$`(){}<>]")
-
         cwd = cwd or self.workroot
 
         try:

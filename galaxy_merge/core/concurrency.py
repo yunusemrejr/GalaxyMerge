@@ -7,6 +7,11 @@ writes, and conflict detection.
 Patching is safe to call multiple times (idempotent).
 """
 
+# All method assignments in this module are intentional runtime monkey-patches.
+# They replace class methods with lock-safe versions at startup.
+# mypy: disable-error-code="method-assign"
+
+import datetime
 import functools
 import json
 import time
@@ -424,9 +429,7 @@ def patch_session() -> None:
             "session_id": self.session_id,
             "workroot": str(self.workroot),
             "created_at": self.created_at.isoformat(),
-            "updated_at": __import__("datetime")
-            .datetime.now(__import__("datetime").timezone.utc)
-            .isoformat(),
+            "updated_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "status": self._state.get("status", "running"),
             "goal": self._state.get("goal", ""),
             "active": self._state.get("active", True),
@@ -442,9 +445,7 @@ def patch_session() -> None:
             "goal": goal,
             "parsed": {},
             "status": "understanding",
-            "created_at": __import__("datetime")
-            .datetime.now(__import__("datetime").timezone.utc)
-            .isoformat(),
+            "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }
         self.goal_path.parent.mkdir(parents=True, exist_ok=True)
         atomic_write(self.goal_path, json.dumps(goal_data, indent=2))
@@ -568,9 +569,7 @@ def patch_event_log() -> None:
         self, event: str, session_id: str = "", **kwargs: Any
     ) -> dict[str, Any]:
         record = {
-            "time": __import__("datetime")
-            .datetime.now(__import__("datetime").timezone.utc)
-            .isoformat(),
+            "time": datetime.datetime.now(datetime.timezone.utc).isoformat(),
             "session_id": session_id,
             "event": event,
             **kwargs,

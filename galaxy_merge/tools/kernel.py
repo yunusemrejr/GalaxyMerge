@@ -44,17 +44,17 @@ class ToolKernel:
         if schema.requires_safety and schema.mutates:
             target = params.get("path", params.get("target", ""))
             if target:
-                result = self.safety.check_path_write(self._safety_target(str(target)))
-                if result["decision"] == "block":
+                safety_check = self.safety.check_path_write(self._safety_target(str(target)))
+                if safety_check["decision"] == "block":
                     self._emit_event(
                         "tool_blocked",
                         session_id=session_id,
                         tool=name,
-                        reason=result["reason"],
+                        reason=safety_check["reason"],
                     )
                     return ToolResult(
                         success=False,
-                        error=f"safety blocked: {result['reason']}",
+                        error=f"safety blocked: {safety_check['reason']}",
                         blocked=True,
                     )
 
@@ -64,7 +64,7 @@ class ToolKernel:
             if inspect.iscoroutine(raw):
                 result = await raw
             else:
-                result = raw
+                result = raw  # type: ignore[assignment]
             duration = int((time.monotonic() - start) * 1000)
             result.data = {
                 **(result.data or {}),

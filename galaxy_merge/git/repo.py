@@ -2,11 +2,14 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from galaxy_merge.safety.credential_policy import CredentialPolicy
+
 
 class GitRepo:
     def __init__(self, workroot: Path):
         self.workroot = workroot.resolve()
         self._git_dir = self.workroot / ".git"
+        self._credential_policy = CredentialPolicy(workroot)
 
     @property
     def is_repo(self) -> bool:
@@ -22,8 +25,8 @@ class GitRepo:
                 timeout=30,
             )
             return {
-                "stdout": result.stdout,
-                "stderr": result.stderr,
+                "stdout": self._credential_policy.redact(result.stdout),
+                "stderr": self._credential_policy.redact(result.stderr),
                 "exit_code": result.returncode,
             }
         except FileNotFoundError:

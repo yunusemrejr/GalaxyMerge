@@ -26,7 +26,7 @@ class TestCheckpoints:
         cp.save("cp_002", "s2", ["b.py"], "r2")
         jsonl_path = gm / "git" / "checkpoints.jsonl"
         assert jsonl_path.exists()
-        lines = [l for l in jsonl_path.read_text().splitlines() if l.strip()]
+        lines = [line for line in jsonl_path.read_text().splitlines() if line.strip()]
         assert len(lines) == 2
 
     def test_list_all_returns_all_records(self, tmp_path):
@@ -45,7 +45,7 @@ class TestCheckpoints:
 
     def test_save_creates_patchsets_dir(self, tmp_path):
         gm = tmp_path / ".gm"
-        cp = Checkpoints(gm)
+        _cp = Checkpoints(gm)
         assert (gm / "git" / "patchsets").exists()
 
     def test_save_handles_empty_files_list(self, tmp_path):
@@ -55,7 +55,7 @@ class TestCheckpoints:
 
     def test_save_handles_special_characters_in_reason(self, tmp_path):
         cp = Checkpoints(tmp_path / ".gm")
-        record = cp.save("cp_001", "s1", ["a.py"], 'fixed "quotes" & <tags>')
+        _record = cp.save("cp_001", "s1", ["a.py"], 'fixed "quotes" & <tags>')
         records = cp.list_all()
         assert records[0]["reason"] == 'fixed "quotes" & <tags>'
 

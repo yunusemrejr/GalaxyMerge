@@ -1,6 +1,7 @@
 from pathlib import Path
 from typing import Any
 
+from galaxy_merge.safety.path_utils import resolve_inside
 from galaxy_merge.tools.schemas import ToolSchema, ToolResult
 from galaxy_merge.safety.sandbox import Sandbox
 from galaxy_merge.safety.governor import SafetyGovernor
@@ -47,7 +48,15 @@ def make_shell_tools(
                     blocked=True,
                 )
 
-        cmd_cwd = (workroot / cwd).resolve() if cwd else workroot
+        if cwd:
+            cmd_cwd = resolve_inside(workroot, cwd)
+            if cmd_cwd is None:
+                return ToolResult(
+                    success=False,
+                    error="cwd path outside WorkRoot",
+                )
+        else:
+            cmd_cwd = workroot
         result = sandbox.run(command, cwd=cmd_cwd, timeout_seconds=timeout)
 
         return ToolResult(

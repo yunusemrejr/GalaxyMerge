@@ -94,7 +94,7 @@ ROLE_MAX_TOKENS: dict[str, int] = {
 }
 
 # Default cost per 1M tokens (USD) — fallback when not configured
-DEFAULT_COSTS: dict[str, dict[str, float]] = {
+DEFAULT_COSTS: dict[str, float] = {
     "input": 0.50,
     "output": 1.50,
     "cached_input": 0.10,  # DeepSeek-style cached input discount

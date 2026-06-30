@@ -1,4 +1,5 @@
 import json
+import logging
 import secrets
 from datetime import datetime, timezone
 from pathlib import Path
@@ -7,6 +8,8 @@ from typing import Any
 from galaxy_merge.core.events import EventLog
 from galaxy_merge.core.locks import atomic_write
 from galaxy_merge.core.runtime_models import SessionState
+
+logger = logging.getLogger("galaxy_merge.session")
 
 
 def _generate_id(prefix: str) -> str:
@@ -359,8 +362,8 @@ def _validate_project_json(path: Path) -> list[str]:
     if errors:
         import logging
 
-        for e in errors:
-            logging.warning(f"project.json validation: {e}")
+        for err in errors:
+            logging.warning(f"project.json validation: {err}")
     return errors
 
 
@@ -380,7 +383,7 @@ def _detect_default_branch(workroot: Path) -> str:
             if r.returncode == 0:
                 return r.stdout.strip()
         except Exception:
-            pass
+            logger.debug("Git branch detection failed, defaulting to 'main'", exc_info=True)
     return "main"
 
 

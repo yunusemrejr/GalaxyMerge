@@ -44,25 +44,25 @@ def test_panel_js_null_guards_before_innerHTML():
             # Skip lines inside try-catch or if blocks that already guard
             if "container.innerHTML" in line:
                 # Look backward for the container assignment
-                found_guard = False
+                _found_guard = False
                 for j in range(max(0, i - 5), i):
                     if "if (!container)" in lines[j] or "if (container)" in lines[j]:
-                        found_guard = True
+                        _found_guard = True
                         break
                     # Check if container was assigned and null-checked on same line
                     if "const container" in lines[j] and ("if (!container)" in lines[j] or "container) return" in lines[j]):
-                        found_guard = True
+                        _found_guard = True
                         break
                 # It's OK if the null guard is on the same line or next
                 if i > 0:
                     prev_line = lines[i - 1]
                     if "if (!container)" in prev_line or "if (container)" in prev_line:
-                        found_guard = True
+                        _found_guard = True
                     if "if (!container) return" in prev_line:
-                        found_guard = True
+                        _found_guard = True
                 # Also check the line itself for inline guard
                 if "if (container)" in line or "if (!container)" in line:
-                    found_guard = True
+                    _found_guard = True
                 # It's also OK if container is freshly set via getElementById and checked
                 if i >= 1 and "const container = document.getElementById" in lines[i - 1]:
                     # Check if there's a null guard right after

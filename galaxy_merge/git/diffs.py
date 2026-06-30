@@ -1,5 +1,8 @@
+import logging
 import subprocess
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 def generate_diff(
@@ -22,7 +25,8 @@ def generate_diff(
             timeout=10,
         )
         return result.stdout
-    except Exception:
+    except Exception as e:
+        logger.debug("Failed to generate diff for %s: %s", file_path, e)
         return ""
     finally:
         Path(old_path).unlink(missing_ok=True)

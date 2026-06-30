@@ -1,5 +1,6 @@
 import json
 import os
+import time
 from contextlib import contextmanager
 import socket
 import tempfile
@@ -11,7 +12,7 @@ from typing import Any
 try:  # pragma: no cover - platform-dependent
     import fcntl
 except Exception:  # pragma: no cover - platform-dependent
-    fcntl = None
+    fcntl = None  # type: ignore[assignment]
 
 
 _OFFLINE_PORTS_FILE = Path(tempfile.gettempdir()) / "galaxy_merge_offline_ports.json"
@@ -82,7 +83,7 @@ def _with_offline_lock() -> Any:
 
 
 def _sweep_offline_registry(registry: dict[str, Any]) -> None:
-    now = int(__import__("time").time())
+    now = int(time.time())
     stale = [
         port
         for port, entry in list(registry.items())
@@ -164,7 +165,7 @@ def reserve_socket(port: int = 0, start: int = 7419) -> socket.socket:
         raise OSError("could not reserve a Galaxy Merge server port")
 
     offline_port = _allocate_offline_port(port)
-    return _OfflineSocket(offline_port)
+    return _OfflineSocket(offline_port)  # type: ignore[return-value]
 
 
 def find_free_port(start: int = 7419) -> int:

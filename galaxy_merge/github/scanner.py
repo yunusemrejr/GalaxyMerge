@@ -1,4 +1,5 @@
 import json
+import logging
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -6,6 +7,8 @@ from typing import Any
 import httpx
 
 from galaxy_merge.core.locks import atomic_write
+
+logger = logging.getLogger(__name__)
 
 
 class GitHubScanner:
@@ -130,7 +133,8 @@ class GitHubScanner:
                 if response.status_code == 200:
                     return response.json()
                 return []
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get contents for %s/%s: %s", owner, repo, e)
                 return []
 
     async def _get_readme(self, owner: str, repo: str) -> str:
@@ -149,7 +153,8 @@ class GitHubScanner:
                         )
                         return decoded[:5000]
                 return ""
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get README for %s/%s: %s", owner, repo, e)
                 return ""
 
     async def _get_releases(
@@ -175,7 +180,8 @@ class GitHubScanner:
                         for r in response.json()
                     ]
                 return []
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get releases for %s/%s: %s", owner, repo, e)
                 return []
 
     async def _get_issues(
@@ -204,7 +210,8 @@ class GitHubScanner:
                         if "pull_request" not in i
                     ]
                 return []
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get issues for %s/%s: %s", owner, repo, e)
                 return []
 
     async def _get_pull_requests(
@@ -230,7 +237,8 @@ class GitHubScanner:
                         for pr in response.json()
                     ]
                 return []
-            except Exception:
+            except Exception as e:
+                logger.debug("Failed to get pull requests for %s/%s: %s", owner, repo, e)
                 return []
 
     def _parse_url(self, url: str) -> tuple[str, str]:

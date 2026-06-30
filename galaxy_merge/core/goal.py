@@ -1,4 +1,5 @@
 import re
+from datetime import datetime, timezone
 from typing import Any
 
 TASK_TYPE_PATTERNS: list[tuple[str, str]] = [
@@ -30,7 +31,7 @@ class GoalEngine:
             "task_type": task_type,
             "mentioned_files": files,
             "estimated_scope": scope,
-            "parsed_at": __import__("datetime").datetime.now().isoformat(),
+            "parsed_at": datetime.now(timezone.utc).isoformat(),
         }
 
     def _extract_files(self, goal: str) -> list[str]:

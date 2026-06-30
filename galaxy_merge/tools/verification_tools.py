@@ -1,12 +1,15 @@
 from pathlib import Path
 from typing import Any
 
+from galaxy_merge.safety.path_utils import resolve_inside
 from galaxy_merge.tools.schemas import ToolSchema, ToolResult
 
 
 def make_verification_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
     async def verify_syntax(path: str) -> ToolResult:
-        target = (workroot / path).resolve()
+        target = resolve_inside(workroot, path)
+        if target is None:
+            return ToolResult(success=False, error="path outside WorkRoot")
         if not target.exists():
             return ToolResult(success=False, error="file not found")
 
@@ -34,7 +37,9 @@ def make_verification_tools(workroot: Path) -> list[tuple[ToolSchema, Any]]:
         )
 
     async def verify_file_exists(path: str) -> ToolResult:
-        target = (workroot / path).resolve()
+        target = resolve_inside(workroot, path)
+        if target is None:
+            return ToolResult(success=False, error="path outside WorkRoot")
         exists = target.exists()
         return ToolResult(
             success=True,

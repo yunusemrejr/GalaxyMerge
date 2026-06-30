@@ -99,7 +99,7 @@ def register_notes_routes(app, session, get_orchestrator):
                     content={"error": "target already exists"}, status_code=409
                 )
             old_path.rename(new_path)
-            index = _load_notes_index(index_path, {"schema_version": 1, "notes": []})
+            index = _load_notes_index(notes_dir)
             updated = False
             for item in index.get("notes", []):
                 if item.get("path") == old_path.name:
@@ -143,7 +143,7 @@ def register_notes_routes(app, session, get_orchestrator):
             path = notes_dir / f"{note_id}.md"
             if not path.exists():
                 return JSONResponse(content={"error": "not found"}, status_code=404)
-            index = _load_notes_index(index_path, {"schema_version": 1, "notes": []})
+            index = _load_notes_index(notes_dir)
             target = None
             for item in index.get("notes", []):
                 if item.get("path") == path.name:
@@ -175,7 +175,7 @@ def register_notes_routes(app, session, get_orchestrator):
             path = notes_dir / f"{note_id}.md"
             if not path.exists():
                 return JSONResponse(content={"error": "not found"}, status_code=404)
-            index = _load_notes_index(index_path, {"schema_version": 1, "notes": []})
+            index = _load_notes_index(notes_dir)
             target = None
             for item in index.get("notes", []):
                 if item.get("path") == path.name:
@@ -235,9 +235,7 @@ def register_notes_routes(app, session, get_orchestrator):
         if not notes_dir.exists():
             return {"query": q, "results": [], "count": 0}
 
-        index_payload = _load_notes_index(
-            notes_dir / "index.json", {"schema_version": 1, "notes": []}
-        )
+        index_payload = _load_notes_index(notes_dir)
         index_map = {}
         for item in index_payload.get("notes", []):
             if not isinstance(item, dict):

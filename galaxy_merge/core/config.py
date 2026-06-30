@@ -6,7 +6,6 @@ from typing import Any
 from pydantic import BaseModel
 
 from galaxy_merge.core.locks import atomic_write
-from galaxy_merge.core.opencode_import import import_opencode_providers
 
 APP_CONFIG_DIR = Path.home() / ".config" / "galaxy-merge"
 APP_DATA_DIR = Path.home() / ".local" / "share" / "galaxy-merge"

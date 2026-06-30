@@ -291,7 +291,8 @@
         }
       }
       if (unavailable.length) {
-        unavailable.slice(0, 3).forEach(p => addChat('error', `${p.provider_id}: ${p.warning || 'unavailable'}`));
+        const summary = unavailable.map(p => p.provider_id).join(', ');
+        LogsPanel.add(`[providers] ${unavailable.length} unavailable: ${summary}`, 'warn');
       }
       ToolsPanel.render(data.tools || []);
       if (window.CouncilPanel) {

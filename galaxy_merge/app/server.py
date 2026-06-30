@@ -10,6 +10,7 @@ GUI serving. Business logic is delegated to focused modules:
 
 import asyncio
 import json
+import logging
 import os
 import shutil
 from base64 import b64encode
@@ -47,6 +48,8 @@ STATIC_DIR = Path(__file__).resolve().parent.parent / "gui" / "static"
 APP_INSTALL_DIR = Path(__file__).resolve().parent.parent.parent
 _build_tree = build_tree
 
+logger = logging.getLogger("galaxy_merge.server")
+
 
 class SessionServer:
     def __init__(self, session: Session, port: int = 0):
@@ -76,7 +79,7 @@ class SessionServer:
             if is_relative_to(workroot, pkg_path.parent):
                 return True
         except Exception:
-            pass
+            logger.debug("Codebase-inside check failed", exc_info=True)
         return False
 
     def _ensure_project_config(self, target: Path, source: Path) -> None:
@@ -199,11 +202,6 @@ class SessionServer:
             await self._broadcast(
                 {"type": "goal_set", "goal": goal, "status": "understanding"}
             )
-
-            if self._orchestrator is None:
-                self._orchestrator = Orchestrator(
-                    self.session, self.config_dir, APP_INSTALL_DIR
-                )
 
             self._goal_task = asyncio.create_task(
                 self._execute_goal_and_broadcast(goal)
@@ -447,6 +445,7 @@ class SessionServer:
                 try:
                     tools_count = len(self._orchestrator.tool_kernel.list_tools())
                 except Exception:
+                    logger.debug("Failed to list tools", exc_info=True)
                     tools_count = 0
                 try:
                     providers = self._orchestrator.providers.available_providers()
@@ -455,6 +454,7 @@ class SessionServer:
                         1 for p in providers if p.get("available", True)
                     )
                 except Exception:
+                    logger.debug("Failed to list providers", exc_info=True)
                     providers_loaded = 0
                     providers_available = 0
 
@@ -516,7 +516,7 @@ class SessionServer:
             except asyncio.CancelledError:
                 pass
             except Exception:
-                pass
+                logger.debug("WebSocket handler error", exc_info=True)
             finally:
                 try:
                     self._ws_clients.remove(ws)
@@ -532,10 +532,20 @@ class SessionServer:
 
     async def _execute_goal_and_broadcast(self, goal: str) -> None:
         if self._orchestrator is None:
-            self._orchestrator = Orchestrator(
-                self.session, self.config_dir, APP_INSTALL_DIR
-            )
-            await self._orchestrator.initialize()
+            try:
+                self._orchestrator = Orchestrator(
+                    self.session, self.config_dir, APP_INSTALL_DIR
+                )
+                await self._orchestrator.initialize()
+            except Exception as exc:
+                result = {"error": f"Initialization failed: {exc}", "complete": False}
+                self.session.event_log.emit(
+                    "goal_failed",
+                    session_id=self.session.session_id,
+                    error=str(exc),
+                )
+                await self._broadcast({"type": "goal_result", "result": result})
+                return
         try:
             result = await self._orchestrator.execute_goal(goal)
         except asyncio.CancelledError:

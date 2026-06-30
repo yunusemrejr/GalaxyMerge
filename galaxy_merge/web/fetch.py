@@ -1,4 +1,6 @@
+import ipaddress
 import re
+import socket
 from typing import Any, Final
 from urllib.parse import urlparse
 
@@ -60,6 +62,18 @@ def _is_binary_content_type(content_type: str) -> bool:
     return any(content_type.startswith(prefix) for prefix in BINARY_CONTENT_PREFIXES)
 
 
+def _is_private_ip(hostname: str) -> bool:
+    try:
+        resolved = socket.getaddrinfo(hostname, None)
+        for family, _, _, _, sockaddr in resolved:
+            ip = ipaddress.ip_address(sockaddr[0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return True
+        return False
+    except (socket.gaierror, ValueError):
+        return True
+
+
 def _read_limited_text(response: requests.Response, max_bytes: int) -> tuple[str, bool]:
     chunks: list[bytes] = []
     total = 0
@@ -88,11 +102,20 @@ def _read_limited_text(response: requests.Response, max_bytes: int) -> tuple[str
 def fetch_page(
     url: str, timeout: int = 30, max_bytes: int = MAX_FETCH_BYTES
 ) -> dict[str, Any]:
-    scheme = urlparse(url).scheme.lower()
+    parsed = urlparse(url)
+    scheme = parsed.scheme.lower()
     if scheme not in {"http", "https"}:
         return {
             "url": url,
             "error": f"unsupported URL scheme: {scheme or 'missing'}",
+            "status": 0,
+        }
+
+    hostname = parsed.hostname or ""
+    if _is_private_ip(hostname):
+        return {
+            "url": url,
+            "error": "SSRF blocked: target is a private/internal IP address",
             "status": 0,
         }
 

@@ -1,3 +1,4 @@
+import logging
 import os
 import sys
 import signal
@@ -22,6 +23,8 @@ from galaxy_merge.core.concurrency import (
 )
 
 VERSION = "0.1.0"
+
+logger = logging.getLogger("galaxy_merge.launcher")
 
 
 def _detect_install_dir() -> Path | None:
@@ -210,7 +213,7 @@ class Launcher:
                 try:
                     write_heartbeat(session.gm_dir, session.session_id)
                 except Exception:
-                    pass
+                    logger.debug("Heartbeat write failed", exc_info=True)
 
         self._heartbeat_thread = threading.Thread(target=_loop, daemon=True)
         self._heartbeat_thread.start()
