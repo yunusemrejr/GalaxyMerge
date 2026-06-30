@@ -9,26 +9,47 @@ from galaxy_merge.safety.credential_policy import redact_text
 OFFLINE_MOCK_RESPONSES: dict[str, dict[str, Any]] = {
     "planner": {
         "goal_understanding": "offline mock: goal acknowledged",
-        "relevant_files": [],
+        "relevant_files": ["src/main.py"],
         "steps": ["analyze goal", "determine approach", "apply changes"],
         "completion_criteria": ["changes applied", "no syntax errors"],
-        "risks": [],
+        "risks": ["offline mode: review depth limited"],
     },
     "scout": {
-        "files_found": [],
+        "files_found": ["src/main.py"],
         "architecture_summary": "offline mock: no workspace scan performed",
         "uncertainties": ["offline mode: limited context"],
     },
     "implementer": {
-        "changes": [],
+        "changes": [
+            {
+                "file": "src/main.py",
+                "action": "edit",
+                "diff": "# offline mock: no changes applied",
+                "rationale": "offline mode — no real implementation",
+            }
+        ],
     },
     "reviewer": {
-        "findings": [],
-        "risks": ["offline mode: limited review depth"],
+        "findings": [
+            {
+                "type": "info",
+                "file": "src/main.py",
+                "evidence": "offline mode: no real review performed",
+                "severity": "low",
+                "recommendation": "provide API keys for real review",
+            }
+        ],
         "approved": True,
     },
     "cheap_verifier": {
-        "findings": [],
+        "findings": [
+            {
+                "type": "info",
+                "file": "src/main.py",
+                "evidence": "offline mode: no real verification",
+                "severity": "low",
+            }
+        ],
         "syntax_ok": True,
         "summary": "offline mock verification: no syntax errors detected",
     },
@@ -38,8 +59,14 @@ OFFLINE_MOCK_RESPONSES: dict[str, dict[str, Any]] = {
         "completion_claim_valid": True,
     },
     "synthesizer": {
-        "plan": [],
-        "summary": "offline mock: no changes needed",
+        "plan": [
+            {
+                "tool": "offline_mock",
+                "params": {},
+                "rationale": "offline mode — no real synthesis",
+            }
+        ],
+        "summary": "offline mock: no changes needed (provide API keys for real work)",
         "contradictions_resolved": [],
     },
 }

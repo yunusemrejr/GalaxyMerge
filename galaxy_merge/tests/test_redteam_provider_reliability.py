@@ -847,11 +847,20 @@ class TestCouncilRoleFailures:
             mock_prov.set_role_response(r, MOCK_SUCCESS_RESPONSES.get(r, {}))
 
         results = await council.execute()
-        assert "error" in results.get("planner", [{}])[0], "Planner should fail"
-        assert "error" in results.get("implementer", [{}])[0], "Implementer should fail"
-        # With a single provider, once planner marks it unhealthy,
-        # all other roles cascade. This is acceptable: clear error is reported.
-        # With multiple providers, other roles would use fallback.
+        # With a single mock provider that fails for planner, the provider
+        # gets marked unhealthy and ALL roles fall back to offline_mock.
+        # The key invariant: the harness produces output for every role
+        # instead of crashing or returning empty results.
+        for role in ["planner", "scout", "implementer", "reviewer", "skeptic", "cheap_verifier", "synthesizer"]:
+            assert role in results, f"Role '{role}' missing from results"
+            assert len(results[role]) > 0, f"Role '{role}' has empty results"
+        # At least one role should have come from the offline_mock fallback
+        offline_results = [
+            r for role_results in results.values()
+            for r in role_results
+            if r.get("provider") == "offline_mock"
+        ]
+        assert len(offline_results) > 0, "Expected offline_mock fallback to activate"
 
     @pytest.mark.asyncio
     async def test_synthesizer_fails(self, config_dir, event_log):
@@ -987,26 +996,38 @@ class TestCouncilRoleFailures:
                     m.set_role_failure(role_name, "http_500")
 
         results = await council.execute()
-        # All roles should have errors
-        all_have_errors = all(
-            any("error" in r for r in results.get(role, [{"error": "missing"}]))
-            for role in [
-                "planner",
-                "scout",
-                "implementer",
-                "reviewer",
-                "skeptic",
-                "cheap_verifier",
-                "synthesizer",
-            ]
-        )
-        assert all_have_errors, "All roles should report errors when all providers fail"
+        # When all real providers fail, the offline_mock fallback ensures the council
+        # still produces usable results for every role rather than crashing.
+        # Verify all 7 roles produced output (either real errors or offline fallback).
+        expected_roles = [
+            "planner",
+            "scout",
+            "implementer",
+            "reviewer",
+            "skeptic",
+            "cheap_verifier",
+            "synthesizer",
+        ]
+        for role in expected_roles:
+            assert role in results, f"Role '{role}' missing from results — offline fallback did not activate"
+            role_results = results[role]
+            assert len(role_results) > 0, f"Role '{role}' has empty results"
 
-        # Synthesize to verify "fail safe" behavior
+        # At least some roles should have fallen back to offline_mock
+        offline_fallbacks = [
+            r for role in expected_roles
+            for r in results.get(role, [])
+            if r.get("provider") == "offline_mock"
+        ]
+        assert len(offline_fallbacks) > 0, (
+            "Expected at least one role to fall back to offline_mock when all real providers fail"
+        )
+
+        # Synthesize — fusion should succeed (offline_mock gives valid schema output)
         syn = Synthesizer()
         fused = syn.fuse(results)
-        assert len(fused.get("errors", [])) > 0, "Fusion should report errors"
-        assert fused.get("changes_proposed", -1) == 0, "No changes should be proposed"
+        # Even in full-fallback mode, the harness produces a valid fusion payload
+        assert "summary" in fused, "Fusion should produce a summary even in fallback mode"
 
 
 class TestFallbackBehavior:

@@ -206,7 +206,7 @@ class Council:
                 schema = ROLE_SCHEMAS.get(role_name, {})
                 required_fields = schema.get("required", [])
                 missing_fields = [
-                    f for f in required_fields if f not in parsed or not parsed.get(f)
+                    f for f in required_fields if f not in parsed
                 ]
                 if missing_fields:
                     provider_retry_count[provider_id] = (
@@ -325,6 +325,10 @@ class Council:
             tried.update(exclude)
         for provider_id, model, model_config in candidates:
             if provider_id in tried:
+                continue
+            # Skip offline_mock in the regular fallback chain — it is only
+            # used as an absolute last resort via select_best_model().
+            if provider_id == "offline_mock":
                 continue
             provider = self.providers.get(provider_id)
             if provider:

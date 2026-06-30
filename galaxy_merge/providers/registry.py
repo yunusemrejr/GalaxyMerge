@@ -226,6 +226,8 @@ class ProviderRegistry:
             self._load_errors.append("providers.json not found")
 
         provider_ids = set()
+        available_count = 0
+        unavailable_count = 0
         for provider_id, config in providers_config.get("providers", {}).items():
             if not config.get("enabled", True):
                 continue
@@ -233,10 +235,26 @@ class ProviderRegistry:
             if provider:
                 self._providers[provider_id] = provider
                 provider_ids.add(provider_id)
+                if provider.available:
+                    available_count += 1
+                else:
+                    unavailable_count += 1
+                    logger.warning(
+                        "Provider '%s' unavailable: %s",
+                        provider_id,
+                        provider.warning or "no reason given",
+                    )
             else:
                 self._load_errors.append(
                     f"provider '{provider_id}': unknown type '{config.get('type')}'"
                 )
+
+        logger.info(
+            "Loaded %d providers (%d available, %d unavailable)",
+            len(self._providers),
+            available_count,
+            unavailable_count,
+        )
 
         if models_path.exists():
             try:
@@ -250,24 +268,35 @@ class ProviderRegistry:
                         continue
                     if cfg.get("provider") in self._providers:
                         self._models[mid] = cfg
+                    else:
+                        logger.debug(
+                            "Model '%s' skipped: provider '%s' not loaded",
+                            mid,
+                            cfg.get("provider"),
+                        )
             except json.JSONDecodeError as e:
                 self._load_errors.append(f"models.json: invalid JSON — {e}")
         else:
             self._load_errors.append("models.json not found")
 
+        logger.info("Loaded %d models", len(self._models))
+
         self._inject_offline_fallback()
 
     def _inject_offline_fallback(self) -> None:
-        """Inject a deterministic OfflineMockProvider when no real providers are available.
+        """Ensure offline_mock is always available as a lowest-priority fallback.
 
-        This ensures the council can always produce a valid plan even when all
-        configured providers lack API keys, are down, or are unreachable.
+        The offline mock provides deterministic, schema-conformant responses for
+        every council role without any network calls. It is injected unconditionally
+        so that the council can always produce a usable plan even when:
+          - All configured providers lack API keys
+          - All configured providers are down or unreachable
+          - Only ollama-type providers exist but the server isn't running
+
+        Real providers are always preferred because _score_model() gives the
+        offline mock a low score (no strengths, small context window), so it only
+        gets selected when no real provider is healthy.
         """
-        has_available = any(
-            provider.available for provider in self._providers.values()
-        )
-        if has_available:
-            return
         if "offline_mock" in self._providers:
             return
 
@@ -293,7 +322,7 @@ class ProviderRegistry:
             ],
         }
         logger.info(
-            "Injected offline_mock fallback provider: no real providers available"
+            "Injected offline_mock fallback provider (always available as last resort)"
         )
 
     def _create_provider(
@@ -328,24 +357,71 @@ class ProviderRegistry:
     ) -> tuple[str, str, dict[str, Any]] | None:
         candidates = self.get_models_for_role(role)
         if not candidates:
+            logger.warning(
+                "No models configured for role '%s' — "
+                "check models.json has entries with roles=['%s']",
+                role,
+                role,
+            )
             return None
 
         min_window = _minimum_context_window(role)
         scored = []
+        offline_candidates = []  # offline_mock goes here as last resort
+        skipped: list[tuple[str, str]] = []
         for provider_id, model, model_config in candidates:
             provider = self._providers.get(provider_id)
-            if not provider or not provider.available:
+            if not provider:
+                skipped.append((model, f"provider '{provider_id}' not registered"))
+                continue
+            if not provider.available:
+                skipped.append(
+                    (model, f"provider '{provider_id}' not available: {provider.warning}")
+                )
                 continue
             cw = model_config.get("context_window", 0)
             if cw and cw < min_window:
+                skipped.append(
+                    (model, f"context_window {cw} < minimum {min_window}")
+                )
                 continue
             score = _score_model(model_config, role, cost_policy, prefer_strengths)
-            scored.append((score, provider_id, model, model_config))
+            # Separate offline_mock from real providers so it's only
+            # selected when nothing else is available.
+            if provider_id == "offline_mock":
+                offline_candidates.append((score, provider_id, model, model_config))
+            else:
+                scored.append((score, provider_id, model, model_config))
 
-        scored.sort(key=lambda x: x[0], reverse=True)
         if scored:
+            scored.sort(key=lambda x: x[0], reverse=True)
             _, provider_id, model, model_config = scored[0]
+            logger.debug(
+                "Selected model '%s' (provider=%s) for role '%s' (score=%.1f, %d candidates)",
+                model,
+                provider_id,
+                role,
+                scored[0][0],
+                len(scored),
+            )
             return (provider_id, model, model_config)
+
+        # No real provider available — fall back to offline_mock if present
+        if offline_candidates:
+            offline_candidates.sort(key=lambda x: x[0], reverse=True)
+            _, provider_id, model, model_config = offline_candidates[0]
+            logger.warning(
+                "Role '%s' falling back to offline_mock — no real provider available",
+                role,
+            )
+            return (provider_id, model, model_config)
+
+        logger.warning(
+            "No eligible model for role '%s' — %d candidate(s) skipped: %s",
+            role,
+            len(skipped),
+            skipped,
+        )
         return None
 
     def get_models_for_role(self, role: str) -> list[tuple[str, str, dict[str, Any]]]:

@@ -1,3 +1,4 @@
+import socket
 from typing import Any
 
 import httpx
@@ -10,6 +11,35 @@ class OllamaProvider(ProviderBase):
         super().__init__(provider_id, config)
         self.base_url = config.get("base_url", "http://127.0.0.1:11434").rstrip("/")
         self.timeout = config.get("timeout_seconds", 180)
+
+        # Verify the Ollama server is actually reachable.
+        # Without this check, the provider would report available=True even when
+        # no server is running, which blocks the offline fallback injection.
+        if not self._is_reachable():
+            self._healthy = False
+            self._available = False
+            self._warning = (
+                f"Ollama server not reachable at {self.base_url} — "
+                "start Ollama or disable this provider"
+            )
+
+    @staticmethod
+    def _parse_host_port(base_url: str) -> tuple[str, int]:
+        from urllib.parse import urlparse
+
+        parsed = urlparse(base_url)
+        host = parsed.hostname or "127.0.0.1"
+        port = parsed.port or 11434
+        return host, port
+
+    def _is_reachable(self) -> bool:
+        """Quick TCP connect check — does not make an HTTP request."""
+        host, port = self._parse_host_port(self.base_url)
+        try:
+            with socket.create_connection((host, port), timeout=2):
+                return True
+        except (OSError, ConnectionRefusedError, TimeoutError):
+            return False
 
     async def chat_completion(
         self,
